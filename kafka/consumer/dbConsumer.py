@@ -3,8 +3,12 @@ import json
 import pymongo
 from pymongo import MongoClient
 import time
+from dotenv import load_dotenv
+import os
 
 TOPIC_NAME = 'raw_data'
+DBUSERNAME = os.environ.get("DB_USERNAME")
+DBPASSSWORD = os.environ.get("DB_PASSWORD")
 
 consumer = KafkaConsumer(
     TOPIC_NAME,
