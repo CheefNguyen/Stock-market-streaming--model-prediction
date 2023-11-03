@@ -17,7 +17,7 @@ consumer = KafkaConsumer(
     value_deserializer=json.loads
 )
 
-# cluster = MongoClient("mongodb+srv://nguyen7obu:iwcwLSDyE0DF22lo@cluster0.50fxadn.mongodb.net/?retryWrites=true&w=majority")
+# cluster = MongoClient("mongodb+srv://:@cluster0.50fxadn.mongodb.net/?retryWrites=true&w=majority")
 cluster = MongoClient("mongodb://localhost:27017")
 db = cluster["thesis"]
 collection = db["rawData"]
