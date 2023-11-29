@@ -6,7 +6,7 @@ import time
 from dotenv import load_dotenv
 import os
 
-TOPIC_NAME = 'raw_data'
+TOPIC_NAME = 'raw_daily'
 load_dotenv()
 DBUSERNAME = os.environ.get("DB_USERNAME")
 DBPASSSWORD = os.environ.get("DB_PASSWORD")
