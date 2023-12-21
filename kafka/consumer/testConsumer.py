@@ -1,7 +1,7 @@
 from kafka import KafkaConsumer
 import json
 
-TOPIC_NAME = 'raw_data'
+TOPIC_NAME = 'raw_realtime'
 
 consumer = KafkaConsumer(
     TOPIC_NAME,
