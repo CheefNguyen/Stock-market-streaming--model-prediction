@@ -19,11 +19,11 @@ def fetch_data(date):
 
     response = requests.get(API_VNDIRECT,verify=True, headers=headers)
     res = response.json()['data']
-
     return res
 
 def realtime_task():
     today = datetime.today().strftime('%Y-%m-%d')
+    timestamp = datetime.now()
 
     producer = KafkaProducer(bootstrap_servers = ['broker:29092'],
                             max_block_ms = 5000)
@@ -62,10 +62,11 @@ with DAG('daily_dag',
 
 with DAG('realtime_dag',
          default_args= default_args,
-         schedule_interval='* 1-7 * * 1-5',
+         schedule_interval='* 2-7 * * 1-5',
          catchup= False) as dag:
     
     realtime_streaming_task = PythonOperator(
         task_id = 'realtime_streaming_task',
         python_callable= realtime_task
     )
+    
