@@ -39,12 +39,13 @@ def realtime_task():
 def daily_task():
     date = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
 
-    producer = KafkaProducer(bootstrap_servers = ['broker:29092'],
-                            max_block_ms = 5000)
+    producer = KafkaProducer(bootstrap_servers = ['broker:29092'])
     
     try:
         res = fetch_data(date)
-        producer.send('raw_daily', json.dumps(res).encode('utf-8'))
+        # res = fetch_data(date)
+        res = json.dumps(res).encode('utf-8')
+        producer.send('raw_daily', res)
         logging.info('Send to Kafka')
     except Exception as e:
         logging.error(f'An error occured: {e}')
@@ -52,7 +53,7 @@ def daily_task():
 
 with DAG('daily_dag',
          default_args= default_args,
-         schedule_interval='0 1 * * 2-6',
+        #  schedule_interval='0 1 * * 2-6',
          catchup= False) as dag:
 
     daily_streaming_task = PythonOperator(
@@ -69,4 +70,3 @@ with DAG('realtime_dag',
         task_id = 'realtime_streaming_task',
         python_callable= realtime_task
     )
-    
