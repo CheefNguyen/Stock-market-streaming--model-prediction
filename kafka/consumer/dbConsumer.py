@@ -13,7 +13,7 @@ DBPASSSWORD = os.environ.get("DB_PASSWORD")
 
 consumer = KafkaConsumer(
     TOPIC_NAME,
-    bootstrap_servers = 'localhost:9092',
+    bootstrap_servers = 'kafka:9092',
     auto_offset_reset='latest', 
     enable_auto_commit=True,
     value_deserializer=json.loads
@@ -26,11 +26,12 @@ collection = db["rawRealtimeData2"]
 
 while True:
     for mes in consumer:
-        mes = mes.value
-        timestamp = datetime.now()
-        json.dumps(mes)
-        for value in mes:
-            value.update({"TimeStamp": timestamp})
-        if mes:
-            collection.insert_many(mes)
-            print(f"send to db {timestamp}")
+        # mes = mes.value
+        # timestamp = datetime.now()
+        # json.dumps(mes)
+        # for value in mes:
+        #     value.update({"TimeStamp": timestamp})
+        # if mes:
+        #     collection.insert_many(mes)
+        #     print(f"send to db {timestamp}")
+        print(mes)
