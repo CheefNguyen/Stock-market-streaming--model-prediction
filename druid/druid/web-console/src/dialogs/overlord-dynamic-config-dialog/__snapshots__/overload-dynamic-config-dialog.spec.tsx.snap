@@ -1,0 +1,12 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`OverlordDynamicConfigDialog matches snapshot 1`] = `
+<SnitchDialog
+  className="overlord-dynamic-config-dialog"
+  onClose={[Function]}
+  onSave={[Function]}
+  title="Overlord dynamic config"
+>
+  <Memo(Loader) />
+</SnitchDialog>
+`;
