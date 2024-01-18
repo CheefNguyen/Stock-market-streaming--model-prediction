@@ -6,11 +6,20 @@ import logging
 import requests
 from kafka import KafkaProducer
 import time
+from pymongo import MongoClient
+from dotenv import load_dotenv
+from datetime import datetime
+import os
 
 default_args = {
     'owner': 'che',
     'start_date': datetime(2023, 11, 8)
 }
+
+TOPIC_NAME = 'raw_realtime'
+load_dotenv()
+DBUSERNAME = os.environ.get("DB_USERNAME")
+DBPASSSWORD = os.environ.get("DB_PASSWORD")
 
 def fetch_data(date):
     floor = 'HOSE'
@@ -33,6 +42,15 @@ def realtime_task():
         res = fetch_data(today)
         producer.send('raw_realtime', json.dumps(res).encode('utf-8'))
         logging.info('Send to Kafka')
+
+        # cluster = MongoClient("mongodb://localhost:27017")
+        cluster = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.keduavv.mongodb.net/")
+
+        db = cluster["thesis"]
+        collection = db["rawRealtimeData2"]
+        for value in res:
+            value.update({"TimeStamp": timestamp})
+        collection.insert_many(res)
     except Exception as e:
         logging.error(f'An error occured: {e}')
 
