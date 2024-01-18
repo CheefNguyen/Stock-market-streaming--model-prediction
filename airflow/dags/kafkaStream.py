@@ -46,7 +46,7 @@ def realtime_task():
         res = fetch_data(today)
         for item in res:
             item.update({"TimeStamp": timestamp})
-            producer.send('raw_realtime', json.dumps(res, default=serialize_datetime).encode('utf-8'))
+            producer.send('raw_realtime', json.dumps(item, default=serialize_datetime).encode('utf-8'))
         logging.info('Send to Kafka')
 
         # cluster = MongoClient("mongodb://localhost:27017")
