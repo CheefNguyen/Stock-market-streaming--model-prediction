@@ -30,6 +30,10 @@ def fetch_data(date):
     res = response.json()['data']
     return res
 
+def serialize_datetime(obj): 
+    if isinstance(obj, datetime): 
+        return obj.isoformat()
+
 def realtime_task():
     today = datetime.today().strftime('%Y-%m-%d')
     timestamp = datetime.now()
@@ -40,7 +44,9 @@ def realtime_task():
 
     try:
         res = fetch_data(today)
-        producer.send('raw_realtime', json.dumps(res).encode('utf-8'))
+        for item in res:
+            item.update({"TimeStamp": timestamp})
+            producer.send('raw_realtime', json.dumps(res, default=serialize_datetime).encode('utf-8'))
         logging.info('Send to Kafka')
 
         # cluster = MongoClient("mongodb://localhost:27017")
@@ -48,8 +54,6 @@ def realtime_task():
 
         db = cluster["thesis"]
         collection = db["rawRealtimeData2"]
-        for value in res:
-            value.update({"TimeStamp": timestamp})
         collection.insert_many(res)
     except Exception as e:
         logging.error(f'An error occured: {e}')
