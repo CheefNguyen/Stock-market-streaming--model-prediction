@@ -21,10 +21,6 @@ class StockTradingEnv(gym.Env):
 ####
 
 # Import the necessary modules
-import gym
-from gym import spaces
-import numpy as np
-import pandas as pd
 
 # Define a custom environment class that inherits from gym.Env
 class StockTradingEnv(gym.Env):
