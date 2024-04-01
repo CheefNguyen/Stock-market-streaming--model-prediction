@@ -1,12 +1,19 @@
 import numpy as np
+import pandas as pd
 import random
-# import gym
-# import tensorflow
+# import gymnasium as gym
+
 from collections import deque
+import sys 
+import os
 
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
+
+sys.path.append(os.path.abspath("./models"))
+from env.TradingEnv import OHLCEnvironment
+import config as config
 
 class MyAgent:
     def __init__(self, state_size, action_size):
@@ -74,3 +81,53 @@ class MyAgent:
         state = state.reshape((1, self.state_size))
         q_values = self.main_network.predict(state, verbose=0)
         return np.argmax(q_values[0])
+    
+df = pd.read_csv("models\data\done_data.csv")
+env = OHLCEnvironment(df)
+state, _ = env.reset()
+
+# Định nghĩa state_size và action_size
+state_size = env.observation_space.shape[0]
+action_size = env.action_space.n
+
+# Định nghĩa tham số khác
+n_episodes = 100
+n_timesteps = 500
+batch_size = 64
+
+# Khởi tạo agent
+my_agent = MyAgent(state_size, action_size)
+total_time_step = 0
+
+for ep in range(n_episodes):
+
+    ep_rewards = 0
+    state, _ = env.reset()
+
+    for t in range(n_timesteps):
+
+        total_time_step += 1
+        # Cập nhật lại target NN mỗi my_agent.update_targetnn_rate
+        if total_time_step % my_agent.update_targetnn_rate == 0:
+            # Có thể chọn cách khác = weight của targetnetwork = 0 * weight của targetnetwork  + 1  * weight của mainnetwork
+            my_agent.target_network.set_weights(my_agent.main_network.get_weights())
+
+        action = my_agent.make_decision(state)
+        next_state, reward, terminal, _, _ = env.step(action)
+        my_agent.save_experience(state,action, reward, next_state, terminal)
+
+        state = next_state
+        ep_rewards += reward
+
+        if terminal:
+            print("Ep ", ep+1, " reach terminal with reward = ", ep_rewards)
+            break
+
+        if len(my_agent.replay_buffer) > batch_size:
+            my_agent.train_main_network(batch_size)
+
+    if my_agent.epsilon > my_agent.epsilon_min:
+        my_agent.epsilon = my_agent.epsilon * my_agent.epsilon_decay
+
+# Save weights
+my_agent.main_network.save(f"{config.TRAINED_MODEL_DIR}/train_agent.h5")
