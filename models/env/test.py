@@ -37,15 +37,14 @@ class MultiTickerStockTradingEnv(gym.Env):
     def step(self, actions):
         assert len(actions) == self.num_tickers, f"Invalid number of actions: {len(actions)}, expected {self.num_tickers}"
 
-        rewards = 0
+        rewards = []
         for i, ticker in enumerate(self.tickers):
-            current_data = self.df[ticker].iloc[self.current_step]
+            current_data = self.data[ticker].iloc[self.current_step]
 
             # Take action
             action_index = actions[i]
             reward = self._take_action(action_index, ticker, current_data)
-
-            rewards += reward
+            rewards.append(reward)
 
         # Move to the next time step
         self.current_step += 1
@@ -57,6 +56,7 @@ class MultiTickerStockTradingEnv(gym.Env):
         next_observation = self._get_observation()
 
         return next_observation, rewards, done, {}
+
 
     def _take_action(self, action, ticker, current_data):
         reward = 0
@@ -100,7 +100,7 @@ class DQNAgent:
         model.add(Dense(24, input_dim=self.state_size, activation='relu'))
         model.add(Dense(24, activation='relu'))
         model.add(Dense(self.action_size, activation='linear'))
-        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     def remember(self, state, action, reward, next_state, done):
@@ -149,9 +149,9 @@ for e in range(EPISODES):
     state = np.reshape(state, [1, state_size])
     for time in range(env.max_steps):
         action = agent.act(state)
-        next_state, reward, done, _ = env.step(action)
-        reward = reward if not done else -10
-        next_state = np.reshape(next_state, [1, state_size])
+        next_observation, rewards, done, _ = env.step(action)
+        reward = rewards[0]  # As we are using a single environment, we consider the first reward
+        next_state = np.reshape(next_observation, [1, state_size])
         agent.remember(state, action, reward, next_state, done)
         state = next_state
         if done:
