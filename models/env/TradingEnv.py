@@ -17,7 +17,7 @@ class MultiTickerOHLCEnv(gym.Env):
         self.max_steps = min(len(df[ticker]) for ticker in tickers) - 1
 
         # Action space: 0 for selling, 1 for holding, 2 for buying for each ticker
-        self.action_space = spaces.MultiDiscrete([3] * self.num_tickers)
+        self.action_space = np.prod([3] * self.num_tickers)
 
         # Observation space: OHLC data for each ticker
         self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_tickers, window_size, 4), dtype=np.float32)
@@ -36,7 +36,7 @@ class MultiTickerOHLCEnv(gym.Env):
             current_data = self.df[ticker].iloc[self.current_step]
 
             # Take action
-            action_index = actions[i]
+            action_index = actions
             reward = self._take_action(action_index, ticker, current_data)
 
             rewards += reward
@@ -56,15 +56,15 @@ class MultiTickerOHLCEnv(gym.Env):
         reward = 0
         if action == 0:  # Selling
             if self.shares_held[ticker] > 0:
-                reward = current_data['Close'] * self.shares_held[ticker]
+                reward = current_data['close'] * self.shares_held[ticker]
                 self.balance += reward
                 self.shares_held[ticker] = 0
         elif action == 1:  # Holding
             pass  # Do nothing
         elif action == 2:  # Buying
-            if self.balance >= current_data['Close']:
+            if self.balance >= current_data['close']:
                 self.shares_held[ticker] += 1
-                self.balance -= current_data['Close']
+                self.balance -= current_data['close']
 
         return reward
 
