@@ -1,189 +1,161 @@
-# Import the necessary modules
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import random
+import gym
+from gym import spaces
 import numpy as np
+import pandas as pd
+import random
+
 from collections import deque
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.optimizers import Adam
 
-# Define some hyperparameters
-BATCH_SIZE = 64 # the size of the minibatch for training
-GAMMA = 0.99 # the discount factor for future rewards
-EPS_START = 0.9 # the initial value of epsilon for the epsilon-greedy exploration
-EPS_END = 0.05 # the final value of epsilon
-EPS_DECAY = 200 # the number of steps to decay epsilon
-TARGET_UPDATE = 10 # the frequency of updating the target network
-MEMORY_SIZE = 10000 # the size of the replay memory
+class MultiTickerStockTradingEnv(gym.Env):
+    def __init__(self, df, tickers, window_size=10, initial_balance=10000):
+        super(MultiTickerStockTradingEnv, self).__init__()
+        self.df = df
+        self.tickers = tickers
+        self.num_tickers = len(tickers)
+        self.window_size = window_size
+        self.initial_balance = initial_balance
+        self.balance = initial_balance
+        self.shares_held = {ticker: 0 for ticker in tickers}
+        self.current_step = self.window_size
+        self.max_steps = min(len(df[ticker]) for ticker in tickers) - 1
 
-# Define the Q-network class
-class QNetwork(nn.Module):
-    # Initialize the network with some parameters
-    def __init__(self, input_size, output_size, hidden_size):
-        # input_size: the size of the input features
-        # output_size: the size of the output actions
-        # hidden_size: the size of the hidden layer
+        # Action space: 0 for selling, 1 for holding, 2 for buying for each ticker
+        self.action_space = spaces.MultiDiscrete([3] * self.num_tickers)
 
-        # Call the parent class constructor
-        super(QNetwork, self).__init__()
+        # Observation space: OHLC data for each ticker
+        self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_tickers, window_size, 4), dtype=np.float32)
 
-        # Define the network layers
-        self.fc1 = nn.Linear(input_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, output_size)
+    def reset(self):
+        self.balance = self.initial_balance
+        self.shares_held = {ticker: 0 for ticker in self.tickers}
+        self.current_step = self.window_size
+        return self._get_observation()
 
-    # Define the forward pass of the network
-    def forward(self, x):
-        # x: the input features
+    def step(self, actions):
+        assert len(actions) == self.num_tickers, f"Invalid number of actions: {len(actions)}, expected {self.num_tickers}"
 
-        # Apply the activation function (ReLU) to the first layer
-        x = F.relu(self.fc1(x))
+        rewards = 0
+        for i, ticker in enumerate(self.tickers):
+            current_data = self.df[ticker].iloc[self.current_step]
 
-        # Return the output of the second layer
-        return self.fc2(x)
+            # Take action
+            action_index = actions[i]
+            reward = self._take_action(action_index, ticker, current_data)
 
-# Create the environment
-env = StockTradingEnv(data, initial_balance, commission, max_steps)
+            rewards += reward
 
-# Get the size of the input features and the output actions
-input_size = env.observation_space.shape[0]
-output_size = env.action_space.n
-
-# Create the Q-network and the target network
-q_network = QNetwork(input_size, output_size, hidden_size).to(device)
-target_network = QNetwork(input_size, output_size, hidden_size).to(device)
-
-# Copy the weights from the Q-network to the target network
-target_network.load_state_dict(q_network.state_dict())
-
-# Set the target network to evaluation mode (no gradient computation)
-target_network.eval()
-
-# Create the optimizer for the Q-network
-optimizer = optim.Adam(q_network.parameters(), lr=0.001)
-
-# Create the replay memory
-memory = deque(maxlen=MEMORY_SIZE)
-
-# Define a function to select an action using epsilon-greedy exploration
-def select_action(state, epsilon):
-    # state: the current state
-    # epsilon: the exploration rate
-
-    # Generate a random number
-    rnd = random.random()
-
-    # If the random number is less than epsilon, select a random action
-    if rnd < epsilon:
-        return torch.tensor([[random.randrange(output_size)]], device=device, dtype=torch.long)
-
-    # Otherwise, select the action with the highest Q-value
-    else:
-        # Turn off gradient computation
-        with torch.no_grad():
-            # Return the action with the maximum Q-value
-            return q_network(state).max(1)[1].view(1, 1)
-
-# Define a function to optimize the Q-network
-def optimize_model():
-    # Check if the memory is large enough for a minibatch
-    if len(memory) < BATCH_SIZE:
-        return
-
-    # Sample a minibatch of transitions from the memory
-    transitions = random.sample(memory, BATCH_SIZE)
-
-    # Transpose the minibatch to get the states, actions, rewards, next_states, and dones
-    state_batch, action_batch, reward_batch, next_state_batch, done_batch = zip(*transitions)
-
-    # Convert the batches to tensors
-    state_batch = torch.cat(state_batch)
-    action_batch = torch.cat(action_batch)
-    reward_batch = torch.cat(reward_batch)
-    next_state_batch = torch.cat(next_state_batch)
-    done_batch = torch.cat(done_batch)
-
-    # Compute the Q-values for the current states and actions
-    q_values = q_network(state_batch).gather(1, action_batch)
-
-    # Compute the expected Q-values for the next states using the target network
-    next_q_values = target_network(next_state_batch).max(1)[0].detach()
-
-    # Compute the expected Q-values for the current states and actions
-    expected_q_values = (next_q_values * GAMMA * (1 - done_batch)) + reward_batch
-
-    # Compute the loss (mean squared error)
-    loss = F.mse_loss(q_values, expected_q_values.unsqueeze(1))
-
-    # Zero the gradients
-    optimizer.zero_grad()
-
-    # Backpropagate the loss
-    loss.backward()
-
-    # Clip the gradients to avoid exploding gradients
-    for param in q_network.parameters():
-        param.grad.data.clamp_(-1, 1)
-
-    # Update the network parameters
-    optimizer.step()
-
-# Initialize the episode counter
-i_episode = 0
-
-# Loop until the environment is solved
-while True:
-    # Increment the episode counter
-    i_episode += 1
-
-    # Reset the environment and get the initial state
-    state = env.reset()
-
-    # Convert the state to a tensor
-    state = torch.tensor([state], device=device, dtype=torch.float)
-
-    # Initialize the total reward
-    total_reward = 0
-
-    # Loop until the episode is done
-    for t in count():
-        # Calculate the exploration rate
-        epsilon = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * t / EPS_DECAY)
-
-        # Select an action
-        action = select_action(state, epsilon)
-
-        # Execute the action and get the next state, reward, and done
-        next_state, reward, done, _ = env.step(action.item())
-
-        # Convert the next state, reward, and done to tensors
-        next_state = torch.tensor([next_state], device=device, dtype=torch.float)
-        reward = torch.tensor([reward], device=device, dtype=torch.float)
-        done = torch.tensor([done], device=device, dtype=torch.uint8)
-
-        # Store the transition in the memory
-        memory.append((state, action, reward, next_state, done))
-
-        # Update the state
-        state = next_state
-
-        # Update the total reward
-        total_reward += reward.item()
-
-        # Optimize the Q-network
-        optimize_model()
+        # Move to the next time step
+        self.current_step += 1
 
         # Check if the episode is done
+        done = self.current_step >= self.max_steps
+
+        # Get the next observation
+        next_observation = self._get_observation()
+
+        return next_observation, rewards, done, {}
+
+    def _take_action(self, action, ticker, current_data):
+        reward = 0
+        if action == 0:  # Selling
+            if self.shares_held[ticker] > 0:
+                reward = current_data['Close'] * self.shares_held[ticker]
+                self.balance += reward
+                self.shares_held[ticker] = 0
+        elif action == 1:  # Holding
+            pass  # Do nothing
+        elif action == 2:  # Buying
+            if self.balance >= current_data['Close']:
+                self.shares_held[ticker] += 1
+                self.balance -= current_data['Close']
+
+        return reward
+
+    def _get_observation(self):
+        observation = np.zeros((self.num_tickers, self.window_size, 4))
+        for i, ticker in enumerate(self.tickers):
+            observation[i] = self.df[ticker].iloc[self.current_step - self.window_size:self.current_step].values
+        return observation
+
+    def render(self, mode='human'):
+        print(f"Step: {self.current_step}, Balance: {self.balance}, Shares Held: {self.shares_held}")
+
+class DQNAgent:
+    def __init__(self, state_size, action_size):
+        self.state_size = state_size
+        self.action_size = action_size
+        self.memory = deque(maxlen=2000)
+        self.gamma = 0.95  # discount rate
+        self.epsilon = 1.0  # exploration rate
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.learning_rate = 0.001
+        self.model = self._build_model()
+
+    def _build_model(self):
+        model = Sequential()
+        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(24, activation='relu'))
+        model.add(Dense(self.action_size, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
+        return model
+
+    def remember(self, state, action, reward, next_state, done):
+        self.memory.append((state, action, reward, next_state, done))
+
+    def act(self, state):
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.action_size)
+        act_values = self.model.predict(state)
+        return np.argmax(act_values[0])  # returns action
+
+    def replay(self, batch_size):
+        minibatch = random.sample(self.memory, batch_size)
+        for state, action, reward, next_state, done in minibatch:
+            target = reward
+            if not done:
+                target = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
+            target_f = self.model.predict(state)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, epochs=1, verbose=0)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+# Initialize environment and agent
+tickers = ['AAPL', 'GOOGL', 'MSFT']
+data = {ticker: pd.DataFrame({
+    'Open': np.random.rand(100),
+    'High': np.random.rand(100),
+    'Low': np.random.rand(100),
+    'Close': np.random.rand(100)
+}) for ticker in tickers}
+
+env = MultiTickerStockTradingEnv(data, tickers)
+state_size = env.observation_space.shape[0] * env.observation_space.shape[1] * env.observation_space.shape[2]
+action_size = np.prod(env.action_space.nvec)
+print(f"Action size: {action_size}")
+agent = DQNAgent(state_size, action_size)
+
+# Parameters
+batch_size = 32
+EPISODES = 1000
+
+# Training loop
+for e in range(EPISODES):
+    state = env.reset()
+    state = np.reshape(state, [1, state_size])
+    for time in range(env.max_steps):
+        action = agent.act(state)
+        next_state, reward, done, _ = env.step(action)
+        reward = reward if not done else -10
+        next_state = np.reshape(next_state, [1, state_size])
+        agent.remember(state, action, reward, next_state, done)
+        state = next_state
         if done:
+            print("episode: {}/{}, score: {}, e: {:.2}".format(e, EPISODES, time, agent.epsilon))
             break
-
-    # Update the target network
-    if i_episode % TARGET_UPDATE == 0:
-        target_network.load_state_dict(q_network.state_dict())
-
-    # Print the episode and the total reward
-    print(f"Episode {i_episode}, Total reward {total_reward}")
-
-    # Check if the environment is solved
-    if total_reward >= env.spec.reward_threshold:
-        print(f"Solved in {i_episode} episodes!")
-        break
+        if len(agent.memory) > batch_size:
+            agent.replay(batch_size)

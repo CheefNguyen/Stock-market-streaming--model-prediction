@@ -12,7 +12,7 @@ from keras.layers import Dense
 from keras.optimizers import Adam
 
 sys.path.append(os.path.abspath("./models"))
-from env.TradingEnv import OHLCEnvironment
+from env.TradingEnv import MultiTickerOHLCEnv
 import config as config
 
 class MyAgent:
@@ -83,12 +83,16 @@ class MyAgent:
         return np.argmax(q_values[0])
     
 df = pd.read_csv("models\data\done_data.csv")
-env = OHLCEnvironment(df)
-state, _ = env.reset()
+tickers = df['code'].unique()
+df = {ticker: df[df["code"] == ticker] for ticker in tickers}
+env = MultiTickerOHLCEnv(df, tickers)
+state = env.reset()
 
 # Định nghĩa state_size và action_size
 state_size = env.observation_space.shape[0]
-action_size = env.action_space.n
+action_size = np.prod(env.action_space.nvec)
+
+print(action_size)
 
 # Định nghĩa tham số khác
 n_episodes = 100
