@@ -1,12 +1,8 @@
-import gymnasium as gym
 import numpy as np
-import pandas as pd
-from gymnasium import spaces
 
-class MultiTickerOHLCEnv(gym.Env):
-    def __init__(self, df, tickers, window_size=10, initial_balance=10000):
-        super(MultiTickerOHLCEnv, self).__init__()
-        self.df = df
+class MultiTickerStockTradingEnv:
+    def __init__(self, data, tickers, window_size=10, initial_balance=10000):
+        self.data = data
         self.tickers = tickers
         self.num_tickers = len(tickers)
         self.window_size = window_size
@@ -14,13 +10,9 @@ class MultiTickerOHLCEnv(gym.Env):
         self.balance = initial_balance
         self.shares_held = {ticker: 0 for ticker in tickers}
         self.current_step = self.window_size
-        self.max_steps = min(len(df[ticker]) for ticker in tickers) - 1
-
-        # Action space: 0 for selling, 1 for holding, 2 for buying for each ticker
+        self.max_steps = min(len(data[ticker]) for ticker in tickers) - 1
         self.action_space = np.prod([3] * self.num_tickers)
-
-        # Observation space: OHLC data for each ticker
-        self.observation_space = spaces.Box(low=0, high=np.inf, shape=(self.num_tickers, window_size, 4), dtype=np.float32)
+        self.observation_space = (self.num_tickers, window_size, 8) # OHLC and 4 Indicators
 
     def reset(self):
         self.balance = self.initial_balance
@@ -29,17 +21,16 @@ class MultiTickerOHLCEnv(gym.Env):
         return self._get_observation()
 
     def step(self, actions):
-        # assert len(actions) == self.num_tickers, f"Invalid number of actions: {len(actions)}, expected {self.num_tickers}"
+        # assert actions == self.num_tickers, f"Invalid number of actions: {actions}, expected {self.num_tickers}"
 
-        rewards = 0
+        rewards = []
         for i, ticker in enumerate(self.tickers):
-            current_data = self.df[ticker].iloc[self.current_step]
+            current_data = self.data[ticker].iloc[self.current_step]
 
             # Take action
             action_index = actions
             reward = self._take_action(action_index, ticker, current_data)
-
-            rewards += reward
+            rewards.append(reward)
 
         # Move to the next time step
         self.current_step += 1
@@ -54,13 +45,13 @@ class MultiTickerOHLCEnv(gym.Env):
 
     def _take_action(self, action, ticker, current_data):
         reward = 0
-        if action == 0:  # Selling
+        if action == 0:  # Holding
+            pass  # Do nothing
+        elif action == 1:  # Selling
             if self.shares_held[ticker] > 0:
                 reward = current_data['close'] * self.shares_held[ticker]
                 self.balance += reward
                 self.shares_held[ticker] = 0
-        elif action == 1:  # Holding
-            pass  # Do nothing
         elif action == 2:  # Buying
             if self.balance >= current_data['close']:
                 self.shares_held[ticker] += 1
@@ -69,12 +60,23 @@ class MultiTickerOHLCEnv(gym.Env):
         return reward
 
     def _get_observation(self):
-        observation = np.zeros((self.num_tickers, self.window_size, 4))
+        observation = np.zeros((self.num_tickers, self.window_size, 8))
         for i, ticker in enumerate(self.tickers):
-            data_slice = self.df[ticker].iloc[self.current_step - self.window_size:self.current_step]
+            data_slice = self.data[ticker].iloc[self.current_step - self.window_size:self.current_step]
 
+            # Assign OHLC to observation array
             observation[i, :, :4] = data_slice[['open', 'high', 'low', 'close']].values
-        return observation
 
-    def render(self, mode='human'):
-        print(f"Step: {self.current_step}, Balance: {self.balance}, Shares Held: {self.shares_held}")
+            # Assign Indicators to observation array
+            macd = np.nan_to_num(data_slice['macd'].values, nan=0.0)
+            rsi = np.nan_to_num(data_slice['rsi'].values, nan=50.0)
+            cci = np.nan_to_num(data_slice['cci'].values, nan=0.0)
+            adx = np.nan_to_num(data_slice['adx'].values, nan=0.0) 
+
+            observation[i, :, 4] = macd
+            observation[i, :, 5] = rsi
+            observation[i, :, 6] = cci
+            observation[i, :, 7] = adx
+
+        return observation
+    

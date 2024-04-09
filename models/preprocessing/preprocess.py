@@ -1,49 +1,37 @@
-import numpy as np
 import pandas as pd
-from stockstats import StockDataFrame as sdf
+from ta.trend import MACD
+from ta.momentum import RSIIndicator
+from ta.trend import CCIIndicator
+from ta.trend import ADXIndicator
 # from config import *
 
-def load_dataset(*, file_name: str) -> pd.DataFrame:
-    data = pd.read_csv(file_name)
-    return data
+def create_ticker_dict(df):
+    result = {}
+    for ticker in df['code'].unique():
+        ticker_data = df[df['code'] == ticker].copy()
+        result[ticker] = ticker_data
+    return result
 
-def add_tech_indicators(df):
-    """
-    Calcualte technical indicators using stockstats package
-    :param: df - pandas dataframe
-    :return: df - pandas dataframe
-    """
-    stock = sdf.retype(df.copy())
+def add_technical_indicators(dict):
+    for ticker, data in dict.items():
+        # Calculate MACD
+        macd = MACD(data['close']).macd()
+        macd_signal = MACD(data['close']).macd_signal()
+        macd_histogram = MACD(data['close']).macd_diff()
 
-    unique_ticker = stock.code.unique()
-    
-    macd = pd.DataFrame()
-    rsi = pd.DataFrame()
-    cci = pd.DataFrame()
-    dx = pd.DataFrame()
+        # Calculate RSI
+        rsi = RSIIndicator(data['close']).rsi()
 
-    for i in range(len(unique_ticker)):
-        ## macd
-        temp = stock[stock.code == unique_ticker[i]]['macd']
-        temp = pd.DataFrame(temp)
-        macd = pd.concat([macd, temp], ignore_index=True)
-        ## rsi
-        temp = stock[stock.code == unique_ticker[i]]['rsi_30']
-        temp = pd.DataFrame(temp)
-        rsi = pd.concat([rsi, temp], ignore_index=True)
-        ## cci
-        temp = stock[stock.code == unique_ticker[i]]['cci_30']
-        temp = pd.DataFrame(temp)
-        cci = pd.concat([cci, temp], ignore_index=True)
-        ## adx
-        temp = stock[stock.code == unique_ticker[i]]['dx_30']
-        temp = pd.DataFrame(temp)
-        dx = pd.concat([dx, temp], ignore_index=True)
+        # Calculate CCI
+        cci = CCIIndicator(data['high'], data['low'], data['close']).cci()
 
+        # Calculate ADX
+        adx = ADXIndicator(data['high'], data['low'], data['close']).adx()
 
-    df['macd'] = macd
-    df['rsi'] = rsi
-    df['cci'] = cci
-    df['adx'] = dx
-
-    return df
+        # Add indicators to DataFrame
+        data['macd'] = macd
+        data['MACD_Signal'] = macd_signal
+        data['MACD_Histogram'] = macd_histogram
+        data['rsi'] = rsi
+        data['cci'] = cci
+        data['adx'] = adx
