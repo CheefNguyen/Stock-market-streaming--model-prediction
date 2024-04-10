@@ -19,7 +19,7 @@ state_size = env.observation_space[0] * env.observation_space[1] * env.observati
 action_size = env.action_space
 agent = DQNAgent(state_size, action_size)
 
-agent.load_agent('models\\trained_models\model.weights.h5', 'models\\trained_models\\agent_state.pkl')
+agent.load_agent('models\\trained_models\\torch_1strun\model_weights.pth', 'models\\trained_models\\torch_1strun\\agent_state.pkl')
 
 print(env.max_steps)
 rewards = []
@@ -32,20 +32,26 @@ for episode in range(EPISODES):
     total_reward = 0
     total_profit = 0
     episode_balances = []
+    episode_profit = []
     done = False
+    prev_balance = 10000
     while not done:
         action = agent.act(state)
         next_state, reward, done, _ = env.step(action)
         next_state = np.reshape(next_state, [1, state_size])
         total_reward += reward[0]
-        total_profit += env.balance - env.initial_balance
+
+        episode_profit.append(env.balance - prev_balance)
+        prev_balance = env.balance
+        
         episode_balances.append(env.balance)
         state = next_state
     rewards.append(total_reward)
     profits.append(total_profit)
-    plt.plot(episode_balances, label=f'Episode {episode+1}')
+    # plt.plot(episode_balances, label=f'Episode {episode+1}')
+    plt.plot(episode_profit, label=f'Episode {episode+1}')
 
-plt.title('Balance During Testing')
+plt.title('Profit During Testing')
 plt.xlabel('Timestep')
 plt.ylabel('Balance')
 plt.legend()

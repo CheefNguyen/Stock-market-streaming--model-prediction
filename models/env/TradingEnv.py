@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 
 class MultiTickerStockTradingEnv:
     def __init__(self, data, tickers, window_size=10, initial_balance=10000):
@@ -65,13 +66,13 @@ class MultiTickerStockTradingEnv:
             data_slice = self.data[ticker].iloc[self.current_step - self.window_size:self.current_step]
 
             # Assign OHLC to observation array
-            observation[i, :, :4] = data_slice[['open', 'high', 'low', 'close']].values
+            observation[i, :, :4] = torch.tensor(data_slice[['open', 'high', 'low', 'close']].values)
 
             # Assign Indicators to observation array
-            macd = np.nan_to_num(data_slice['macd'].values, nan=0.0)
-            rsi = np.nan_to_num(data_slice['rsi'].values, nan=50.0)
-            cci = np.nan_to_num(data_slice['cci'].values, nan=0.0)
-            adx = np.nan_to_num(data_slice['adx'].values, nan=0.0) 
+            macd = torch.nan_to_num(torch.tensor(data_slice['macd'].values), nan=0.0)
+            rsi = torch.nan_to_num(torch.tensor(data_slice['rsi'].values), nan=50.0)
+            cci = torch.nan_to_num(torch.tensor(data_slice['cci'].values), nan=0.0)
+            adx = torch.nan_to_num(torch.tensor(data_slice['adx'].values), nan=0.0)
 
             observation[i, :, 4] = macd
             observation[i, :, 5] = rsi
