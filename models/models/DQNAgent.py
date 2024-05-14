@@ -76,21 +76,34 @@ class DQNAgent:
             self.optimizer.step()
         return total_loss
 
-    def performance_update_epsilon_decay(self, performance_metric):
-        current_performance = performance_metric
+    def performance_update_epsilon_decay(self, performance_metrics):
+        current_reward, current_profit, win_rate = performance_metrics
+
         if self.prev_performance is not None:
-            """
-            When total_reward increase and profit increase 
-            -> decrease epsilon daycay for faster convergence
-            """ 
-            if current_performance[0] > self.prev_performance[0] and current_performance[1] > self.prev_performance[1]:
-                # If performance of episode improves, decrease epsilon decay rate
-                self.epsilon_decay *= 0.99
-            elif current_performance[0] < self.prev_performance[0] and current_performance[1] < self.prev_performance[1]:
-                # If performance of episode declines, minor increase epsilon decay rate
-                self.epsilon_decay *= 1.01
+            prev_reward, prev_profit, prev_win_rate = self.prev_performance
         
-        self.prev_performance = current_performance
+            reward_change_ratio = (current_reward - prev_reward) / max(1, abs(prev_reward))
+            profit_change_ratio = (current_profit - prev_profit) / max(1, abs(prev_profit))
+            win_rate_change_ratio = (win_rate - prev_win_rate) / max(1, abs(prev_win_rate))
+
+            # Define thresholds for significant changes
+            reward_change_threshold = 0.2  # Adjust as needed
+            profit_change_threshold = 0.2  # Adjust as needed
+            win_rate_change_threshold = 0.2  # Adjust as needed
+
+            # Adjust epsilon decay based on performance changes
+            if (reward_change_ratio > reward_change_threshold and
+                profit_change_ratio > profit_change_threshold and
+                win_rate_change_ratio > win_rate_change_threshold):
+                # Significant improvement in reward, profit, and win rate
+                self.epsilon_decay *= 0.99  # Decrease epsilon decay rate
+            elif (reward_change_ratio < -reward_change_threshold and
+                profit_change_ratio < -profit_change_threshold and
+                win_rate_change_ratio < -win_rate_change_threshold):
+                # Significant decline in reward, profit, and win rate
+                self.epsilon_decay *= 1.01  # Increase epsilon decay rate
+
+        self.prev_performance = performance_metrics
         self.epsilon_decay = max(self.epsilon_decay, self.epsilon_min)
 
     def update_target_model(self):
@@ -121,3 +134,12 @@ class DQNAgent:
     def update_epsilon(self):
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+    
+    def calculate_sell_rate(self, rewards):
+        # successful_episodes tang 1 khi mang rewards co gia tri != 0
+        # => cang thuc hien lenh ban nhieu thi win rate tang
+        # => khong dung dk cua win rate
+        successful_episodes = sum(1 for reward in rewards if reward > 0)
+        total_episodes = len(rewards)
+        win_rate = (successful_episodes / total_episodes) * 100
+        return win_rate
