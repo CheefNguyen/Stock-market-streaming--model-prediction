@@ -16,7 +16,7 @@
     margin: 0;
     padding: 0;
     text-decoration: none;
-    text-transform: capitalize;
+    /* text-transform: capitalize; */
     outline: none;
     border: none;
 }
@@ -48,6 +48,8 @@ html{
 body{
     background: var(--black);
     padding-bottom: 8rem;
+    padding-top: 10rem;
+    color: var(--white)
 }
 
 h1{
@@ -56,4 +58,26 @@ h1{
 
 h2{
     color: var(--white);
+}
+
+label{
+    color: var(--white);
+}
+
+.container {
+    display: flex;
+    height: 50vh;
+    width: 100%;
+    place-content: space-evenly;
+    gap: 10%;
+    padding: 0;
+}
+
+.left-column{
+    width: 30%;
+}
+
+.right-column{
+    width: 70%;
+    overflow-y: auto;
 }

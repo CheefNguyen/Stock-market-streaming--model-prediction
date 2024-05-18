@@ -1,38 +1,41 @@
-<!DOCTYPE html>
+{% extends "base.html" %}
+{% block title %}Home Page{% endblock %}
+{% block content %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Strategy Suggestion</title>
-    
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/slider.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <script src="{{ url_for('static', filename='js/scripts.js') }}"></script>
-</head>
+<div class="container">
+        
+        <div class="left-column">
+            <h1 style="margin-bottom: 3vh;">Choose Stock and Initial Balance</h1>
+            <h2>Choose Company </h2>
+            <label for="codeSelect" class="form-label">(*Stock that on HSX Floor only)</label>
+            <select id="codeSelect" class="form-select" aria-label="Default select example">
+                <option selected disabled>&lt;Select Code&gt;</option>
+                <option value="TCB">TCB - Ngân hàng TMCP Kỹ Thương Việt Nam (Techcombank)</option>
+                <option value="VCB">VCB - Ngân hàng Thương mại cổ phần Ngoại thương Việt Nam</option>
+                <option value="HDB">HDB - Ngân hàng TMCP Phát triển T.P Hồ Chí Minh</option>
+                <option value="MBB">MBB - Ngân hàng Thương mại cổ phần Quân đội</option>
+                <option value="BID">BID - Ngân hàng Thương mại cổ phần Đầu tư và Phát triển Việt Nam</option>
+                <option value="VPB">VPB - Ngân hàng Thương mại Cổ phần Việt Nam Thịnh Vượng</option>
+                <option value="EIB">EIB - Ngân hàng Thương mại Cổ phần Xuất nhập khẩu Việt Nam</option>
+            </select>
 
-<body>
-    <h2>Hello World</h2>
-    <h1>Adjust Initial Balance</h1>
-    <div class="range-slider grad" style='--min:5000; --max:10000; --step:100; --value:7500; --text-value:"7500"; --prefix:"$"'>
-        <input type="range" min="5000" max="10000" step="100" value="7500" oninput="this.parentNode.style.setProperty('--value',this.value); this.parentNode.style.setProperty('--text-value', JSON.stringify((+this.value).toLocaleString()))">
-        <output></output>
-        <div class='range-slider__progress'></div>
-    </div>
-
-    <!-- <section>
-        <div class="">
-            <div class="content">
-                <h1>Adjust Initial Balance</h1>
-                <div class="range-slider grad" style='--min:5000; --max:10000; --step:100; --value:7500; --text-value:"7500"; --prefix:"$"'>
-                    <input type="range" min="5000" max="10000" step="100" value="7500" oninput="this.parentNode.style.setProperty('--value',this.value); this.parentNode.style.setProperty('--text-value', JSON.stringify((+this.value).toLocaleString()))">
-                    <output></output>
-                    <div class='range-slider__progress'></div>
-                </div>
+            <h2 style="margin-top: 3vh; margin-bottom: 5vh;">Enter your available initial investment fund</h2>
+            
+            <div id="balanceSlider" class="range-slider grad" style='--min:5000; --max:10000; --step:100; --value:7500; --text-value:"7500"; --prefix:"$"'>
+                <input type="range" min="5000" max="10000" step="100" value="7500" oninput="this.parentNode.style.setProperty('--value',this.value); this.parentNode.style.setProperty('--text-value', JSON.stringify((+this.value).toLocaleString()))">
+                <output></output>
+                <div class='range-slider__progress'></div>
             </div>
+
+            <div style="margin-top: 5vh;">
+                <button type="button" class="btn btn-outline-light btn-lg">Calculate</button>
+            </div>
+        
         </div>
 
-        <div id="chart_holder">
-            <canvas id="resultChart"></canvas>
+        <div class="right-column">
+            <canvas id="realtimeChart"></canvas>
         </div>
-    </section> -->
-</body>
+</div>
+
+{% endblock %}
