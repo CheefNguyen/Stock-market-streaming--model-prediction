@@ -5,11 +5,15 @@ import json
 import logging
 import requests
 from kafka import KafkaProducer
-import time
 from pymongo import MongoClient
 from dotenv import load_dotenv
 from datetime import datetime
 import os
+import pandas as pd
+from ta.trend import MACD
+from ta.momentum import RSIIndicator
+from ta.trend import CCIIndicator
+from ta.trend import ADXIndicator
 
 default_args = {
     'owner': 'che',
@@ -20,6 +24,7 @@ TOPIC_NAME = 'raw_realtime'
 load_dotenv()
 DBUSERNAME = os.environ.get("DB_USERNAME")
 DBPASSSWORD = os.environ.get("DB_PASSWORD")
+codeList = ["VCB", "MBB", "BID", "EIB"]
 
 def fetch_data(date):
     floor = 'HOSE'
@@ -33,6 +38,32 @@ def fetch_data(date):
 def serialize_datetime(obj): 
     if isinstance(obj, datetime): 
         return obj.isoformat()
+
+def add_technical_indicators(df):
+    df = df.sort_values(by="date", ascending=True)
+
+    macd = MACD(df['close']).macd()
+    macd_signal = MACD(df['close']).macd_signal()
+    macd_histogram = MACD(df['close']).macd_diff()
+
+    # Calculate RSI
+    rsi = RSIIndicator(df['close']).rsi()
+
+    # Calculate CCI
+    cci = CCIIndicator(df['high'], df['low'], df['close']).cci()
+
+    # Calculate ADX
+    adx = ADXIndicator(df['high'], df['low'], df['close']).adx()
+
+    # Add indicators to DataFrame
+    df['macd'] = macd
+    df['MACD_Signal'] = macd_signal
+    df['MACD_Histogram'] = macd_histogram
+    df['rsi'] = rsi
+    df['cci'] = cci
+    df['adx'] = adx
+
+    return df
 
 def realtime_task():
     today = datetime.today().strftime('%Y-%m-%d')
@@ -61,21 +92,36 @@ def realtime_task():
 def daily_task():
     date = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
 
-    producer = KafkaProducer(bootstrap_servers = ['kafka:9092'])
+    # producer = KafkaProducer(bootstrap_servers = ['kafka:9092'])
     
     try:
         res = fetch_data(date)
-        # res = fetch_data(date)
-        res = json.dumps(res).encode('utf-8')
-        producer.send('raw_daily', res)
+        filtered_data = [item for item in res if item.get('code') in codeList]
+        filtered_data = json.dumps(filtered_data).encode('utf-8')
+        # producer.send('raw_daily', filtered_data)
         logging.info('Send to Kafka')
+
+        cluster = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.keduavv.mongodb.net/")
+        db = cluster["thesis"]
+        collection = db["dailyRawData"]
+
+        start_date = date - timedelta(days=45)
+
+        for code in codeList:
+            query = {'code': code, 'date': {'$gte': start_date, '$lte': date}}
+            cursor = collection.find(query)
+            df = pd.DataFrame(list(cursor))
+
+            df = add_technical_indicators(df)
+            collection.insert_many(df[df['date'] == date].to_dict('records'))
+
     except Exception as e:
         logging.error(f'An error occured: {e}')
 
 
 with DAG('daily_dag',
          default_args= default_args,
-        #  schedule_interval='0 1 * * 2-6',
+         schedule_interval='0 1 * * 2-6',
          catchup= False) as dag:
 
     daily_streaming_task = PythonOperator(

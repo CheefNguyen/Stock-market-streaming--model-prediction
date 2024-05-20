@@ -21,7 +21,7 @@ class DQNAgent:
         self.memory = deque(maxlen=10000)
         self.gamma = 0.99  # Higher prioritize long-term rewards/ Low short-term
         self.epsilon = 1.0  # exploration rate
-        self.epsilon_min = 0.01 # Higher can do more risky move to explore, Lower lead to sooner convergance
+        self.epsilon_min = 0.001 # Higher can do more risky move to explore, Lower lead to sooner convergance
         self.epsilon_decay = 0.98
         self.learning_rate = 0.001
 

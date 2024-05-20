@@ -10,12 +10,12 @@
             <label for="codeSelect" class="form-label">(*Stock that on HSX Floor only)</label>
             <select id="codeSelect" class="form-select" aria-label="Default select example">
                 <option selected disabled>&lt;Select Code&gt;</option>
-                <option value="TCB">TCB - Ngân hàng TMCP Kỹ Thương Việt Nam (Techcombank)</option>
+                <!-- <option value="TCB">TCB - Ngân hàng TMCP Kỹ Thương Việt Nam (Techcombank)</option> -->
                 <option value="VCB">VCB - Ngân hàng Thương mại cổ phần Ngoại thương Việt Nam</option>
-                <option value="HDB">HDB - Ngân hàng TMCP Phát triển T.P Hồ Chí Minh</option>
+                <!-- <option value="HDB">HDB - Ngân hàng TMCP Phát triển T.P Hồ Chí Minh</option> -->
                 <option value="MBB">MBB - Ngân hàng Thương mại cổ phần Quân đội</option>
                 <option value="BID">BID - Ngân hàng Thương mại cổ phần Đầu tư và Phát triển Việt Nam</option>
-                <option value="VPB">VPB - Ngân hàng Thương mại Cổ phần Việt Nam Thịnh Vượng</option>
+                <!-- <option value="VPB">VPB - Ngân hàng Thương mại Cổ phần Việt Nam Thịnh Vượng</option> -->
                 <option value="EIB">EIB - Ngân hàng Thương mại Cổ phần Xuất nhập khẩu Việt Nam</option>
             </select>
 
@@ -28,13 +28,15 @@
             </div>
 
             <div style="margin-top: 5vh;">
-                <button type="button" class="btn btn-outline-light btn-lg">Calculate</button>
+                <button id="calculateBtn" type="button" class="btn btn-outline-light btn-lg">Calculate</button>
             </div>
         
         </div>
 
         <div class="right-column">
             <canvas id="realtimeChart"></canvas>
+
+            <canvas id="actionChart"></canvas>
         </div>
 </div>
 
