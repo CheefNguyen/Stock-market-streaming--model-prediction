@@ -22,8 +22,8 @@ default_args = {
 
 TOPIC_NAME = 'raw_realtime'
 load_dotenv()
-DBUSERNAME = os.environ.get("DB_USERNAME")
-DBPASSSWORD = os.environ.get("DB_PASSWORD")
+DBUSERNAME = 'nguyen7obu'
+DBPASSSWORD = 'iwcwLSDyE0DF22lo'
 codeList = ["VCB", "MBB", "BID", "EIB"]
 
 def fetch_data(date):
@@ -40,7 +40,7 @@ def serialize_datetime(obj):
         return obj.isoformat()
 
 def add_technical_indicators(df):
-    df = df.sort_values(by="date", ascending=True)
+    # df = df.sort_values(by="date", ascending=True)
 
     macd = MACD(df['close']).macd()
     macd_signal = MACD(df['close']).macd_signal()
@@ -90,30 +90,32 @@ def realtime_task():
         logging.error(f'An error occured: {e}')
 
 def daily_task():
-    date = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
-
+    date = datetime.today() - timedelta(days=1)
+    date_str = date.strftime('%Y-%m-%d')
     # producer = KafkaProducer(bootstrap_servers = ['kafka:9092'])
     
     try:
-        res = fetch_data(date)
+        res = fetch_data(date_str)
         filtered_data = [item for item in res if item.get('code') in codeList]
-        filtered_data = json.dumps(filtered_data).encode('utf-8')
-        # producer.send('raw_daily', filtered_data)
-        logging.info('Send to Kafka')
+        filtered_df = pd.DataFrame(filtered_data)
 
         cluster = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.keduavv.mongodb.net/")
         db = cluster["thesis"]
         collection = db["dailyRawData"]
 
-        start_date = date - timedelta(days=45)
-
+        start_date = date - timedelta(days=60)
+        start_date_str = start_date.strftime('%Y-%m-%d')
         for code in codeList:
-            query = {'code': code, 'date': {'$gte': start_date, '$lte': date}}
-            cursor = collection.find(query)
+            query = {'code': code, 'date': {'$gte': start_date_str, '$lte': date_str}}
+            cursor = collection.find(query, {"_id": 0})
             df = pd.DataFrame(list(cursor))
+            temp = filtered_df[filtered_df['code'] == code]
+            df = pd.concat([df, temp], ignore_index= True)
 
             df = add_technical_indicators(df)
-            collection.insert_many(df[df['date'] == date].to_dict('records'))
+            res = df[df['date'] == date_str].to_dict('records')
+            if res:
+                collection.insert_many(res)
 
     except Exception as e:
         logging.error(f'An error occured: {e}')
@@ -129,12 +131,12 @@ with DAG('daily_dag',
         python_callable= daily_task
     )
 
-with DAG('realtime_dag',
-         default_args= default_args,
-         schedule_interval='* 2-7 * * 1-5',
-         catchup= False) as dag:
+# with DAG('realtime_dag',
+#          default_args= default_args,
+#          schedule_interval='* 2-7 * * 1-5',
+#          catchup= False) as dag:
     
-    realtime_streaming_task = PythonOperator(
-        task_id = 'realtime_streaming_task',
-        python_callable= realtime_task
-    )
+#     realtime_streaming_task = PythonOperator(
+#         task_id = 'realtime_streaming_task',
+#         python_callable= realtime_task
+#     )

@@ -22,12 +22,20 @@ client = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.ke
 db = client["thesis"]
 collection = db["dailyRawData"]
 
+def candleChart():
+    global raw_data
+    if raw_data is None:
+        return jsonify({"error": "No data available"}), 400
+    
+    df = pd.DataFrame(raw_data)
+
 @app.route('/')
 def index():
     return  render_template('index.html')
 
 @app.route('/get_realtime_stock_data', methods=['GET'])
 def get_stock_data():
+    global raw_data
     code = request.args.get('code')
     # today = "2024-05-17"
     today = datetime.today().strftime('%Y-%m-%d')
@@ -40,6 +48,7 @@ def get_stock_data():
 
 @app.route('/get_action_data', methods=['GET'])
 def predict():
+    global raw_data
     code = request.args.get('code')
 
     query = {'code': code, 'date': {'$gte': "2024-01-01"}}
@@ -71,12 +80,15 @@ def predict():
         state = next_state
     
     actions = [int(action) for action in actions]
-    end_date = datetime.today().strftime('%Y-%m-%d')
-    dateList = pd.date_range(start='2024-01-01', end=end_date).to_list()
+    dates = [item['date'] for item in raw_data]
+    prices = [item['close'] for item in raw_data]
+    
     response_data = {
-        'dates': dateList,
-        'actions': actions
+        'dates': dates,
+        'actions': actions,
+        'prices': prices
     }
+    
     return jsonify(response_data)
 
 if __name__ == '__main__':

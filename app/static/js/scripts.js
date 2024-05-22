@@ -1,11 +1,59 @@
 document.addEventListener('DOMContentLoaded', (event) => {
     document.getElementById('codeSelect').addEventListener('change', fetchRealtimeStockData);
-    document.getElementById('calculateBtn').addEventListener('click', DQNAgentPredict);
+    document.getElementById('calculateBtn').addEventListener('click', drawActionChart);
+    
 });
 
+function drawActionChart(){
+    const stockCode = document.getElementById('codeSelect').value;
+    fetch(`/get_action_data?code=${stockCode}`)
+        .then(response => response.json())
+        .then(data => {
+            var dates = data.dates;
+            var prices = data.prices;
+            var actions = data.actions;
+
+            console.log(data)
+
+            var trace1 = {
+                x: dates,
+                y: prices,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Stock Price'
+            };
+
+            var traces = [trace1];
+            actions.forEach((action, index) => {
+                if (action !== 0) {  // Skip 'hold' actions
+                    traces.push({
+                        x: [dates[index]],
+                        y: [prices[index]],
+                        mode: 'markers',
+                        marker: {
+                            size: 12,
+                            symbol: action === 1 ? 'triangle-up' : 'triangle-down', // 'buy' or 'sell'
+                            color: action === 1 ? 'green' : 'red' // Green for buy, red for sell
+                        },
+                        name: action === 1 ? 'Buy' : 'Sell'
+                    });
+                }
+            });
+
+            var layout = {
+                title: 'Stock Price and Actions',
+                xaxis: { title: 'Date', automargin: true },
+                yaxis: { title: 'Price', automargin: true },
+                margin: { l: 50, r: 50, t: 50, b: 50 },  // Adjust margins to ensure sufficient space
+                responsive: true  // Make the plot responsive
+            };
+
+            Plotly.newPlot('actionChart', traces, layout);
+        })
+}
+
 function fetchRealtimeStockData() {
-    const codeSelect = document.getElementById('codeSelect');
-    const stockCode = codeSelect.value;
+    const stockCode = document.getElementById('codeSelect').value;
     fetch(`/get_realtime_stock_data?code=${stockCode}`)
         .then(response => response.json())
         .then(data => {
@@ -14,27 +62,11 @@ function fetchRealtimeStockData() {
         });
 }
 
-function DQNAgentPredict(){
-    const codeSelect = document.getElementById('codeSelect');
-    const stockCode = codeSelect.value;
-    fetch(`/get_action_data?code=${stockCode}`)
-        .then(response => response.json())
-        .then(data => {
-            if (data.error) {
-                alert(data.error);
-                return;
-            }
-            renderChart(data.dates, data.actions);
-        })
-        .catch(error => console.error('Error fetching action data:', error));
-}
-
 let stockRealtimeChart;
-let actionChart ;
 
 function renderRealtimeChart(data) {
     const labels = data.map(item => item.date);
-    const adClose = data.map(item => item.adClose);
+    const close = data.map(item => item.close);
 
     const ctx = document.getElementById('realtimeChart').getContext('2d');
 
@@ -47,8 +79,8 @@ function renderRealtimeChart(data) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'Adjusted Close Price',
-                data: adClose,
+                label: 'Close Price',
+                data: close,
                 borderColor: 'rgba(75, 192, 192, 1)',
                 backgroundColor: 'rgba(75, 192, 192, 0.2)',
                 fill: false,
@@ -76,67 +108,6 @@ function renderRealtimeChart(data) {
                     },
                     ticks: {
                         color: 'white'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    labels: {
-                        color: 'white'
-                    }
-                }
-            }
-        }
-    });
-}
-
-function renderChart(dates, actions) {
-    const ctx = document.getElementById('actionChart').getContext('2d');
-
-    if (actionChart) {
-        actionChart.destroy();
-    }
-
-    actionChart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: dates,
-            datasets: [{
-                label: 'Stock Actions',
-                data: actions,
-                backgroundColor: actions.map(action => {
-                    if (action === 0) return 'blue'; // Hold
-                    if (action === 1) return 'red'; // Sell
-                    return 'green'; // Buy
-                })
-            }]
-        },
-        options: {
-            scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Date',
-                        color: 'white'
-                    },
-                    ticks: {
-                        color: 'white'
-                    }
-                },
-                y: {
-                    title: {
-                        display: true,
-                        text: 'Action',
-                        color: 'white'
-                    },
-                    ticks: {
-                        color: 'white',
-                        stepSize: 1,
-                        callback: function(value) {
-                            if (value === 0) return 'Hold';
-                            if (value === 1) return 'Sell';
-                            return 'Buy';
-                        }
                     }
                 }
             },
