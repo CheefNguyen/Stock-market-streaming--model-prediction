@@ -1,83 +1,82 @@
 import numpy as np
 import torch
 
-class MultiTickerStockTradingEnv:
-    def __init__(self, data, tickers, window_size=10, initial_balance=10000):
+class SingleTickerStockTradingEnv:
+    def __init__(self, data, ticker, window_size=10, initial_balance=10000):
         self.data = data
-        self.tickers = tickers
-        self.num_tickers = len(tickers)
+        self.ticker = ticker
         self.window_size = window_size
         self.initial_balance = initial_balance
         self.balance = initial_balance
-        self.shares_held = {ticker: 0 for ticker in tickers}
+        self.shares_held = 0
         self.current_step = self.window_size
-        self.max_steps = min(len(data[ticker]) for ticker in tickers) - 1
-        self.action_space = np.prod([3] * self.num_tickers)
-        self.observation_space = (self.num_tickers, window_size, 8) # OHLC and 4 Indicators
+        self.max_steps = len(self.data) - 1
+        self.action_space = 3
+        self.observation_space = (window_size, 8)  # OHLC and 4 Indicators
 
     def reset(self):
         self.balance = self.initial_balance
-        self.shares_held = {ticker: 0 for ticker in self.tickers}
+        self.shares_held = 0
         self.current_step = self.window_size
         return self._get_observation()
 
-    def step(self, actions):
-        # assert actions == self.num_tickers, f"Invalid number of actions: {actions}, expected {self.num_tickers}"
+    def step(self, action):
+        current_data = self.data.iloc[self.current_step]
 
-        rewards = []
-        for i, ticker in enumerate(self.tickers):
-            current_data = self.data[ticker].iloc[self.current_step]
+        reward = self._take_action(action, current_data)
 
-            # Take action
-            action_index = actions
-            reward = self._take_action(action_index, ticker, current_data)
-            rewards.append(reward)
-
-        # Move to the next time step
-        self.current_step += 1
-
-        # Check if the episode is done
         done = self.current_step >= self.max_steps
-
-        # Get the next observation
         next_observation = self._get_observation()
 
-        return next_observation, rewards, done, {}
+        info = {
+            "correct_action": self.calculate_correct_action(action, current_data)
+        }
+
+        return next_observation, reward, done, info
 
     def _take_action(self, action, ticker, current_data):
         reward = 0
         if action == 0:  # Holding
-            pass  # Do nothing
+            pass
         elif action == 1:  # Selling
-            if self.shares_held[ticker] > 0:
-                reward = current_data['close'] * self.shares_held[ticker]
+            if self.shares_held > 0:
+                reward = current_data['close'] * self.shares_held
                 self.balance += reward
-                self.shares_held[ticker] = 0
+                self.shares_held = 0
         elif action == 2:  # Buying
             if self.balance >= current_data['close']:
-                self.shares_held[ticker] += 1
+                self.shares_held += 1
                 self.balance -= current_data['close']
-
         return reward
 
     def _get_observation(self):
-        observation = np.zeros((self.num_tickers, self.window_size, 8))
-        for i, ticker in enumerate(self.tickers):
-            data_slice = self.data[ticker].iloc[self.current_step - self.window_size:self.current_step]
+        data_slice = self.data.iloc[self.current_step - self.window_size:self.current_step]
+        observation = np.zeros((self.window_size, 8))
+        
+        # Assign OHLC to observation array
+        observation[:, :4] = torch.tensor(data_slice[['open', 'high', 'low', 'close']].values)
 
-            # Assign OHLC to observation array
-            observation[i, :, :4] = torch.tensor(data_slice[['open', 'high', 'low', 'close']].values)
+        # Assign Indicators to observation array
+        macd = torch.nan_to_num(torch.tensor(data_slice['macd'].values), nan=0.0)
+        rsi = torch.nan_to_num(torch.tensor(data_slice['rsi'].values), nan=50.0)
+        cci = torch.nan_to_num(torch.tensor(data_slice['cci'].values), nan=0.0)
+        adx = torch.nan_to_num(torch.tensor(data_slice['adx'].values), nan=0.0)
 
-            # Assign Indicators to observation array
-            macd = torch.nan_to_num(torch.tensor(data_slice['macd'].values), nan=0.0)
-            rsi = torch.nan_to_num(torch.tensor(data_slice['rsi'].values), nan=50.0)
-            cci = torch.nan_to_num(torch.tensor(data_slice['cci'].values), nan=0.0)
-            adx = torch.nan_to_num(torch.tensor(data_slice['adx'].values), nan=0.0)
-
-            observation[i, :, 4] = macd
-            observation[i, :, 5] = rsi
-            observation[i, :, 6] = cci
-            observation[i, :, 7] = adx
+        observation[:, 4] = macd
+        observation[:, 5] = rsi
+        observation[:, 6] = cci
+        observation[:, 7] = adx
 
         return observation
+
+    def calculate_correct_action(self, action, current_data):
+        if action == 2 and current_data['close'] < current_data['open']:  # Buy low
+            return 1
+        if action == 1 and current_data['close'] > current_data['open']:  # Sell high
+            return 1
+        return 0
     
+    def calculate_profit(self):
+        total_value = self.balance + self.shares_held * self.data.iloc[self.current_step]['close']
+        profit = total_value - self.initial_balance
+        return profit

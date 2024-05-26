@@ -12,8 +12,8 @@ class MultiTickerStockTradingEnv:
         self.shares_held = {ticker: 0 for ticker in tickers}
         self.current_step = self.window_size
         self.max_steps = min(len(data[ticker]) for ticker in tickers) - 1
-        self.action_space = np.prod([3] * self.num_tickers)
-        self.observation_space = (self.num_tickers, window_size, 8) # OHLC and 4 Indicators
+        self.action_space = 3
+        self.observation_space = (self.num_tickers, window_size, 8)  # OHLC and 4 Indicators
 
     def reset(self):
         self.balance = self.initial_balance
@@ -22,32 +22,29 @@ class MultiTickerStockTradingEnv:
         return self._get_observation()
 
     def step(self, actions):
-        # assert actions == self.num_tickers, f"Invalid number of actions: {actions}, expected {self.num_tickers}"
-
         rewards = []
         for i, ticker in enumerate(self.tickers):
             current_data = self.data[ticker].iloc[self.current_step]
 
             # Take action
-            action_index = actions
-            reward = self._take_action(action_index, ticker, current_data)
+            action = actions[i]
+            reward = self._take_action(action, ticker, current_data)
             rewards.append(reward)
 
-        # Move to the next time step
         self.current_step += 1
-
-        # Check if the episode is done
         done = self.current_step >= self.max_steps
-
-        # Get the next observation
         next_observation = self._get_observation()
 
-        return next_observation, rewards, done, {}
+        info = {
+            "correct_actions": self.calculate_correct_actions(actions)  # Example placeholder
+        }
+
+        return next_observation, rewards, done, info
 
     def _take_action(self, action, ticker, current_data):
         reward = 0
         if action == 0:  # Holding
-            pass  # Do nothing
+            pass
         elif action == 1:  # Selling
             if self.shares_held[ticker] > 0:
                 reward = current_data['close'] * self.shares_held[ticker]
@@ -57,7 +54,6 @@ class MultiTickerStockTradingEnv:
             if self.balance >= current_data['close']:
                 self.shares_held[ticker] += 1
                 self.balance -= current_data['close']
-
         return reward
 
     def _get_observation(self):
@@ -80,4 +76,21 @@ class MultiTickerStockTradingEnv:
             observation[i, :, 7] = adx
 
         return observation
+
+    def calculate_correct_actions(self, actions):
+        correct_actions = 0
+        for i, ticker in enumerate(self.tickers):
+            current_data = self.data[ticker].iloc[self.current_step]
+            if actions[i] == 2 and current_data['close'] < current_data['open']:  # Buy low
+                correct_actions += 1
+            if actions[i] == 1 and current_data['close'] > current_data['open']:  # Sell high
+                correct_actions += 1
+        return correct_actions
     
+    def calculate_profit(self):
+        total_value = self.balance
+        for ticker in self.tickers:
+            current_price = self.data[ticker].iloc[self.current_step]['close']
+            total_value += self.shares_held[ticker] * current_price
+        profit = total_value - self.initial_balance
+        return profit

@@ -22,13 +22,6 @@ client = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.ke
 db = client["thesis"]
 collection = db["dailyRawData"]
 
-def candleChart():
-    global raw_data
-    if raw_data is None:
-        return jsonify({"error": "No data available"}), 400
-    
-    df = pd.DataFrame(raw_data)
-
 @app.route('/')
 def index():
     return  render_template('index.html')
@@ -57,27 +50,26 @@ def predict():
     tickers = df['code'].unique()
     df = create_ticker_dict(df)
 
-    env = MultiTickerStockTradingEnv(df, tickers, window_size=10)
+    env = MultiTickerStockTradingEnv(df, tickers, window_size=30)
     state_size = env.observation_space[0] * env.observation_space[1] * env.observation_space[2]
     action_size = env.action_space
-    agent = DQNAgent(state_size, action_size)
-    agent.load_agent('models\\trained_models\\2024_04_10_wrong_reward_func\model_weights.pth', 'models\\trained_models\\2024_04_10_wrong_reward_func\\agent_state.pkl')
+    agent = DQNAgent(state_size, action_size, num_tickers= 1)
 
+    model_weights_path = 'models/trained_models/2024_05_23/model_weights.pth'
+    agent_state_path = 'models/trained_models/2024_05_23/agent_state.pkl'
+    agent.load_agent(model_weights_path, agent_state_path)
+    
     state = env.reset()
     state = np.reshape(state, [1, state_size])
 
-    episode_balances = []
     actions = []
     done = False
 
     while not done:
         action = agent.act(state)
-        next_state, reward, done, _ = env.step(action)
-        next_state = np.reshape(next_state, [1, state_size])
-
         actions.append(action)
-        episode_balances.append(env.balance)
-        state = next_state
+        next_state, rewards, done, _ = env.step([action])
+        state = np.reshape(next_state, [1, state_size])
     
     actions = [int(action) for action in actions]
     dates = [item['date'] for item in raw_data]
