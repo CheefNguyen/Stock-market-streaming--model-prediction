@@ -2,39 +2,52 @@ import numpy as np
 import random
 import pandas as pd
 import os
+from pymongo import MongoClient
+from dotenv import load_dotenv
 
 from env.TradingEnv import *
 from models.DQNAgent import *
-from preprocessing.preprocess import add_technical_indicators, create_ticker_dict
 
 import tensorflow as tf
 from keras.callbacks import TensorBoard
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-df = pd.read_csv("models\data\done_data_indicators.csv")
+load_dotenv()
+DBUSERNAME = os.environ.get("DB_USERNAME")
+DBPASSSWORD = os.environ.get("DB_PASSWORD")
+client = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.keduavv.mongodb.net/")
+db = client["thesis"]
+collection = db["dailyRawData"]
+
+# df = pd.read_csv("models\data\done_data_indicators.csv")
+
+query = {'date': {'$lt': "2022-12-31"}}
+cursor = collection.find(query)
+df = pd.DataFrame(list(cursor))
 tickers = df['code'].unique()
-df_train = df[df['date'] <= '2023-05-31'] # ~0.8 
-df_train = create_ticker_dict(df_train)
-# add_technical_indicators(df_train)
+# tickers = ['MBB', 'BID', 'EIB']
 
-print(len(df_train['ACB']))
+envs = {}
+agents = {}
+state_sizes = {}
 
-env = MultiTickerStockTradingEnv(df_train, tickers, window_size=10)
-state_size = env.observation_space[0] * env.observation_space[1] * env.observation_space[2]
-action_size = env.action_space
-agent = DQNAgent(state_size, action_size)
+for ticker in tickers:
+    df_ticker = df[df['code'] == ticker].reset_index(drop=True)
+    df_ticker = df_ticker.sort_values('date')
+    env = SingleTickerStockTradingEnv(df_ticker)
+    state_size = env.observation_space[0] * env.observation_space[1]
+    agent = DQNAgent(state_size, 3)
+
+    envs[ticker] = env
+    agents[ticker] = agent
+    state_sizes[ticker] = state_size
 
 # Parameters
-batch_size = 32
-EPISODES = 1000
+batch_size = 64
+EPISODES = 500
 target_update_frequency = 10
 
-state = env.reset()
-state = np.reshape(state, [1, state_size])
-
-if os.path.exists('models\\trained_models\model_weights.pth') and os.path.exists('models\\trained_models\\agent_state.pkl'):
-    agent.load_agent('models\\trained_models\model_weights.pth', 'models\\trained_models\\agent_state.pkl')
 
 # Initialize TensorBoard callback
 now = datetime.now().strftime("%Y-%m-%d")
@@ -44,64 +57,55 @@ if not os.path.exists(log_dir):
 tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 # Training loop
+for ticker in tickers:
+    env = envs[ticker]
+    agent = agents[ticker]
+    state_size = state_sizes[ticker]
 
-for e in range(EPISODES):
-    state = env.reset()
-    # init first state of Q-table
-    state = np.reshape(state, [1, state_size])
-    episode_reward  = 0
-    rewards_ = []
-    episode_profit = 0
-    step = 0
-    done = False
-    prev_balance = 10000
-    episode_loss = 0
-    while not done:
-        action = agent.act(state)
-        next_observation, rewards, done, _ = env.step(action)
-        reward = rewards[0]
-        next_state = np.reshape(next_observation, [1, state_size])
-        agent.remember(state, action, reward, next_state, done)
+    for e in range(EPISODES):
+        state = env.reset()
+        episode_reward = 0
+        episode_loss = 0
+        actions_reward = 0
+        total_q_values = 0
+        total_actions = 0
+        initial_balance = env.initial_balance
+        done = False
+        while not done:
+            state = np.reshape(state, [1, state_size])
+            action = agent.act(state, env.shares_held)
+            next_state, reward, done, info = env.step(action)
 
-        # episode_balances.append()
-        episode_reward += reward
-        rewards_.append(reward)
-
-        episode_profit += env.balance - prev_balance
-        prev_balance = env.balance
-
-        state = next_state
-        if done:
-            break
-        if len(agent.memory) > batch_size:
-            batch_loss = agent.replay(batch_size)
-            episode_loss += batch_loss
-
-        if step % target_update_frequency == 0:
-            agent.update_target_model()
-        
-        # with tf.summary.create_file_writer(log_dir).as_default():   
-        
-        step += 1
-
-    avg_loss  = episode_loss/step
-    agent.save_agent('models\\trained_models\model_weights.pth', 'models\\trained_models\\agent_state.pkl')
-
-    # tensorboard --logdir models/logs/
-    with tf.summary.create_file_writer(log_dir).as_default():
-            tf.summary.scalar('Episode Loss', avg_loss, step=e)
-            tf.summary.scalar('total_reward', episode_reward, step=e)
-            tf.summary.scalar('epsilon', agent.epsilon, step=e)
-            tf.summary.scalar('epsilon decay', agent.epsilon_decay, step=e)
-            tf.summary.scalar('Episode Balance', env.balance, step=e)
-            tf.summary.scalar('Episode Profit', episode_profit, step=e)
-
-    win_rate = agent.calculate_sell_rate(rewards_)
-
-    print(f"episode: {e+1}/{EPISODES}, avg_loss: {avg_loss}, e: {agent.epsilon}, Sell Rate = {win_rate:.2f}%")
-
-    #Update epsilon and epsilon decay for next episode
-    performance_metrics = (episode_reward, episode_profit, win_rate)
-    agent.performance_update_epsilon_decay(performance_metrics)
-    agent.update_epsilon()
+            episode_reward += reward
+            actions_reward += info["correct_action_reward"] if "correct_action_reward" in info else 0
+            if action != 0:
+                total_actions += 1
     
+            agent.remember(state, action, reward, next_state, done)
+            state = next_state
+
+            if done:
+                break
+
+        if len(agent.memory) >= batch_size:
+            episode_loss = agent.replay(batch_size)
+            if e % target_update_frequency == 0:
+                agent.update_target_model()
+
+        agent.update_epsilon()
+
+        episode_profit = env.calculate_profit()
+
+        with tf.summary.create_file_writer(log_dir).as_default():
+                tf.summary.scalar('Episode Reward', episode_reward, step=e)
+                tf.summary.scalar('epsilon', agent.epsilon, step=e)
+                tf.summary.scalar('epsilon decay', agent.epsilon_decay, step=e)
+                tf.summary.scalar('Episode Profit', episode_profit, step=e)
+                tf.summary.scalar('Episode Loss', episode_loss, step=e)
+                
+        print(f"{ticker} _Episode: {e+1}/{EPISODES}, epsilon: {agent.epsilon}, Total actions: {total_actions}, action reward: {actions_reward}, %profit: {(episode_profit/initial_balance)*100}%")
+
+        performance_metrics = (episode_profit, episode_reward)
+        # agent.performance_update_epsilon_decay(performance_metrics)
+
+        agent.save_agent(f'models/trained_models/{ticker}_model_weights.pth')

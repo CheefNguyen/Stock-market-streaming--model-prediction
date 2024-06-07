@@ -1,0 +1,2 @@
+python setup.py install
+tensorboard --logdir models/logs/2024-05-23

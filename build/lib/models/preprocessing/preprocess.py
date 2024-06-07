@@ -12,26 +12,28 @@ def create_ticker_dict(df):
         result[ticker] = ticker_data
     return result
 
-def add_technical_indicators(dict):
-    for ticker, data in dict.items():
-        # Calculate MACD
-        macd = MACD(data['close']).macd()
-        macd_signal = MACD(data['close']).macd_signal()
-        macd_histogram = MACD(data['close']).macd_diff()
+def add_technical_indicators(df):
+    df = df.sort_values(by="date", ascending=True)
 
-        # Calculate RSI
-        rsi = RSIIndicator(data['close']).rsi()
+    macd = MACD(df['close']).macd()
+    macd_signal = MACD(df['close']).macd_signal()
+    macd_histogram = MACD(df['close']).macd_diff()
 
-        # Calculate CCI
-        cci = CCIIndicator(data['high'], data['low'], data['close']).cci()
+    # Calculate RSI
+    rsi = RSIIndicator(df['close']).rsi()
 
-        # Calculate ADX
-        adx = ADXIndicator(data['high'], data['low'], data['close']).adx()
+    # Calculate CCI
+    cci = CCIIndicator(df['high'], df['low'], df['close']).cci()
 
-        # Add indicators to DataFrame
-        data['macd'] = macd
-        data['MACD_Signal'] = macd_signal
-        data['MACD_Histogram'] = macd_histogram
-        data['rsi'] = rsi
-        data['cci'] = cci
-        data['adx'] = adx
+    # Calculate ADX
+    adx = ADXIndicator(df['high'], df['low'], df['close']).adx()
+
+    # Add indicators to DataFrame
+    df['macd'] = macd
+    df['MACD_Signal'] = macd_signal
+    df['MACD_Histogram'] = macd_histogram
+    df['rsi'] = rsi
+    df['cci'] = cci
+    df['adx'] = adx
+
+    return df

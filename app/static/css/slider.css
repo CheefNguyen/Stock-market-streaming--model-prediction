@@ -292,14 +292,15 @@
   color: #fff;
 }
 
-body {
+/* body {
   height: 100vh;
   display: grid;
   place-content: space-evenly;
   place-items: center;
   gap: 10%;
   padding: 0;
-}
+} */
+
 @media screen and (max-width: 500px) {
   body {
     padding-top: 2em;
@@ -307,26 +308,8 @@ body {
   }
 }
 
-a {
-  position: fixed;
-  top: 1em;
-  left: 1em;
-  display: inline-block;
-  height: 2em;
-}
-@media screen and (max-width: 500px) {
-  a {
-    position: static;
-    order: -1;
-  }
-}
-a > img {
-  display: inherit;
-  height: 100%;
-}
-
-body > .range-slider,
+.range-slider,
 label[dir=rtl] .range-slider {
-  width: clamp(300px, 50vw, 800px);
+  width: clamp(200px, 100%, 600px);
   min-width: 200px;
 }

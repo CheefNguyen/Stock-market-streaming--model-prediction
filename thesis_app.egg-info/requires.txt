@@ -2,3 +2,8 @@ flask
 kafka-python
 requests
 pymongo
+python-dotenv
+numpy
+pandas
+torch
+tensorflow
