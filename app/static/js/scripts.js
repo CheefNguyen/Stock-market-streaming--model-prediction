@@ -32,8 +32,8 @@ function drawActionChart(){
                         mode: 'markers',
                         marker: {
                             size: 12,
-                            symbol: action === 1 ? 'triangle-up' : 'triangle-down', // 'buy' or 'sell'
-                            color: action === 1 ? 'green' : 'red' // Green for buy, red for sell
+                            symbol: action === 2 ? 'triangle-up' : 'triangle-down', // 'buy' or 'sell'
+                            color: action === 2 ? 'green' : 'red' // Green for buy, red for sell
                         },
                         name: action === 1 ? 'Buy' : 'Sell'
                     });

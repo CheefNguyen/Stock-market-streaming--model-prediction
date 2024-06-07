@@ -5,12 +5,8 @@ from ta.trend import CCIIndicator
 from ta.trend import ADXIndicator
 # from config import *
 
-def create_ticker_dict(df):
-    result = {}
-    for ticker in df['code'].unique():
-        ticker_data = df[df['code'] == ticker].copy()
-        result[ticker] = ticker_data
-    return result
+def create_ticker_data(df, ticker):
+    return {ticker: df[df['code'] == ticker].reset_index(drop=True)}
 
 def add_technical_indicators(df):
     df = df.sort_values(by="date", ascending=True)

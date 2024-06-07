@@ -5,73 +5,43 @@ import matplotlib.pyplot as plt
 
 from env.TradingEnv import *
 from models.DQNAgent import *
-from preprocessing.preprocess import create_ticker_dict
 
-df = pd.read_csv("models\data\done_data_indicators.csv")
-tickers = df['code'].unique()
-df_test = df[df['date'] > '2022-12-31']
+from dotenv import load_dotenv
+import os
+from pymongo import MongoClient
 
-# Preprocess
-df_test = create_ticker_dict(df_test)
 
-env = MultiTickerStockTradingEnv(df_test, tickers, window_size=10)
-state_size = env.observation_space[0] * env.observation_space[1] * env.observation_space[2]
+DBUSERNAME = os.environ.get("DB_USERNAME")
+DBPASSSWORD = os.environ.get("DB_PASSWORD")
+client = MongoClient(f"mongodb+srv://nguyen7obu:iwcwLSDyE0DF22lo@clusterthesis.keduavv.mongodb.net/")
+db = client["thesis"]
+collection = db["dailyRawData"]
+
+query = {'code': 'VCB', 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }}
+cursor = collection.find(query)
+df = pd.DataFrame(list(cursor))
+# df = create_ticker_dict(df)
+
+env = SingleTickerStockTradingEnv(df, window_size=45, initial_balance=7500)
+state_size = env.observation_space[0] * env.observation_space[1]
 action_size = env.action_space
 agent = DQNAgent(state_size, action_size)
 
-agent.load_agent('models\\trained_models\\torch_1strun\model_weights.pth', 'models\\trained_models\\torch_1strun\\agent_state.pkl')
+model_weights_path = f'models/trained_models/VCB_model_weights.pth'
+agent.load_agent(model_weights_path)
 
-print(env.max_steps)
-rewards = []
-profits = []
+state = env.reset()
+state = np.reshape(state, [1, state_size])
 
-EPISODES = 10
-for episode in range(EPISODES):
-    state = env.reset()
-    state = np.reshape(state, [1, state_size])
-    total_reward = 0
-    total_profit = 0
-    episode_balances = []
-    episode_profit = []
-    done = False
-    prev_balance = 10000
-    while not done:
-        action = agent.act(state)
-        next_state, reward, done, _ = env.step(action)
-        next_state = np.reshape(next_state, [1, state_size])
-        total_reward += reward[0]
+actions = []
+done = False
 
-        episode_profit.append(env.balance - prev_balance)
-        prev_balance = env.balance
-        
-        episode_balances.append(env.balance)
-        state = next_state
-    rewards.append(total_reward)
-    profits.append(total_profit)
-    # plt.plot(episode_balances, label=f'Episode {episode+1}')
-    plt.plot(episode_profit, label=f'Episode {episode+1}')
+agent.epsilon = 0
 
-plt.title('Profit During Testing')
-plt.xlabel('Timestep')
-plt.ylabel('Balance')
-plt.legend()
+while not done:
+    action = agent.act(state, env.shares_held)
+    actions.append(action)
+    next_state, reward, done, _ = env.step([action])
+    state = np.reshape(next_state, [1, state_size])
 
-
-plt.figure(figsize=(12, 6))
-plt.subplot(2, 1, 1)
-plt.plot(rewards, label='Total Reward')
-plt.title('Total Reward During Testing ')
-plt.xlabel('Episode')
-plt.ylabel('Total Reward')
-plt.legend()
-
-plt.subplot(2, 1, 2)
-plt.plot(profits, label='Total Profit')
-plt.title('Total Profit During Testing')
-plt.xlabel('Episode')
-plt.ylabel('Total Profit')
-plt.legend()
-
-plt.tight_layout()
-plt.show()
-
+print(action)

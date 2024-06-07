@@ -33,6 +33,7 @@ def get_stock_data():
     # today = "2024-05-17"
     today = datetime.today().strftime('%Y-%m-%d')
     API_VNDIRECT = f"https://finfo-api.vndirect.com.vn/v4/stock_prices?sort=date&q=code:{code}~date:gte:2024-01-01~date:lte:{today}&size=9990&page=1"
+    # API_VNDIRECT = f"https://finfo-api.vndirect.com.vn/v4/stock_prices?sort=date&q=code:{code}~date:gte:2022-12-31~date:lte:2024-01-01&size=9990&page=1"
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
 
     response = requests.get(API_VNDIRECT,verify=True, headers=headers)
@@ -45,19 +46,19 @@ def predict():
     code = request.args.get('code')
 
     query = {'code': code, 'date': {'$gte': "2024-01-01"}}
+    # query = {'code': code, 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }} #test
     cursor = collection.find(query)
     df = pd.DataFrame(list(cursor))
-    tickers = df['code'].unique()
-    df = create_ticker_dict(df)
+    df = df.sort_values('date')
+    print(df)
 
-    env = MultiTickerStockTradingEnv(df, tickers, window_size=30)
-    state_size = env.observation_space[0] * env.observation_space[1] * env.observation_space[2]
+    env = SingleTickerStockTradingEnv(df, window_size=25, initial_balance=100)
+    state_size = env.observation_space[0] * env.observation_space[1]
     action_size = env.action_space
-    agent = DQNAgent(state_size, action_size, num_tickers= 1)
+    agent = DQNAgent(state_size, action_size)
 
-    model_weights_path = 'models/trained_models/2024_05_23/model_weights.pth'
-    agent_state_path = 'models/trained_models/2024_05_23/agent_state.pkl'
-    agent.load_agent(model_weights_path, agent_state_path)
+    model_weights_path = f'models/trained_models/{code}_model_weights.pth'
+    agent.load_agent(model_weights_path)
     
     state = env.reset()
     state = np.reshape(state, [1, state_size])
@@ -65,20 +66,21 @@ def predict():
     actions = []
     done = False
 
+    agent.epsilon = 0
+
     while not done:
-        action = agent.act(state)
+        action = agent.act(state, env.shares_held)
         actions.append(action)
-        next_state, rewards, done, _ = env.step([action])
+        next_state, reward, done, _ = env.step([action])
         state = np.reshape(next_state, [1, state_size])
-    
-    actions = [int(action) for action in actions]
-    dates = [item['date'] for item in raw_data]
-    prices = [item['close'] for item in raw_data]
+
+    dates = df['date'].iloc[env.window_size:].tolist()
+    prices = df['close'].iloc[env.window_size:].tolist()
     
     response_data = {
-        'dates': dates,
-        'actions': actions,
-        'prices': prices
+        'dates': [str(date) for date in dates],  # Convert dates to string
+        'actions': [int(action) for action in actions],  # Convert actions to int
+        'prices': [float(price) for price in prices]  # Convert prices to float
     }
     
     return jsonify(response_data)
