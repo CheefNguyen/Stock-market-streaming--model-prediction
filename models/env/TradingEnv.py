@@ -2,37 +2,45 @@ import numpy as np
 import torch
 
 class SingleTickerStockTradingEnv:
-    def __init__(self, data, window_size=25, initial_balance=500):
+    def __init__(self, data, window_size=25, initial_balance=5000):
         self.data = data
         self.window_size = window_size
-        self.initial_balance = initial_balance
-        self.balance = initial_balance
+        self.initial_balance = float(initial_balance)
+        self.balance = float(initial_balance)
         self.shares_held = 0
         self.current_step = self.window_size
         self.max_steps = len(self.data) - 1
         self.action_space = 3
-        self.observation_space = (window_size, 8)  # OHLC and 4 Indicators
-        self.prev_action = 0
+        self.observation_space = (window_size, 9)  # OHLC and 4 Indicators
+        self.last_trade = 0
+        self.buy_price = []
+        self.closing_price_history = []
 
     def reset(self):
-        self.balance = self.initial_balance
+        self.balance = float(self.initial_balance)
         self.shares_held = 0
         self.current_step = self.window_size
+        self.last_trade = 0
+        self.buy_price = []
+        self.closing_price_history = []
         return self._get_observation()
 
     def step(self, action):
+        done = self.current_step >= self.max_steps
+
         current_data = self.data.iloc[self.current_step]
 
         reward = self._take_action(action, current_data)
 
         self.current_step += 1
 
-        done = self.current_step >= self.max_steps
         next_observation = self._get_observation()
 
         info = {
-            "correct_action_reward": self.calculate_correct_action_reward(action, current_data)
+            "correct_action_reward": self.calculate_reward(action, current_data, )
         }
+
+        self.closing_price_history.append(current_data['close'])
 
         return next_observation, reward, done, info
 
@@ -40,37 +48,120 @@ class SingleTickerStockTradingEnv:
         reward = 0
 
         if action == 0:  # Holding
-            reward = 0.1  # Small reward for holding to prevent overtrading
-            reward += self.calculate_correct_action_reward(action, current_data)
+            reward += self.calculate_reward(action, current_data, )
 
         elif action == 1:  # Selling
             if self.shares_held > 0:
                 sell_value = current_data['close'] * self.shares_held
+                if self.balance < current_data['close']:
+                    reward += 2
                 self.balance += sell_value
-                reward = (sell_value - current_data['close'])  # Reward is profit from selling
-                reward += self.calculate_correct_action_reward(action, current_data)
+                profit = sell_value - sum(self.buy_price)
+                reward += self.calculate_reward(action, current_data, profit)
                 self.shares_held = 0
+                self.buy_price = []
+                self.last_trade = self.current_step
             else:
-                reward = -20  # Penalty for invalid sell action
+                reward -= 10
+
         elif action == 2:  # Buying
             if self.balance >= current_data['close']:
                 self.shares_held += 1
                 self.balance -= current_data['close']
-                reward = self.calculate_correct_action_reward(action, current_data)
+                if len(self.buy_price) > 0 and current_data['close'] < self.buy_price[-1]:
+                    reward += 3
+                self.last_trade = self.current_step
+                self.buy_price.append(current_data['close'])
+                reward += self.calculate_reward(action, current_data)
             else:
-                reward = -20  # Penalty for invalid buy action
+                reward -= 5
 
-        # Penalize for consecutive buy/sell actions
-        if action == self.prev_action:
-            reward -= 10  # Penalty for consecutive buy/sell actions
+        if self.balance < current_data['close'] and self.shares_held > 0 and action == 2:
+            reward -= 1000  # Penalty for not selling to cut losses
 
-        self.prev_action = action  # Update the previous action
+        return reward
+
+    def calculate_reward(self, action, current_data, profit=0):
+        reward = 0
         
+        # Profit-based rewards
+        if action == 1 and self.shares_held > 0:  # Selling
+            if profit > 0:
+                reward += profit * 10  # Positive reward for profitable trades
+            
+            # MACD
+            if current_data['macd'] < current_data['MACD_Signal']:
+                reward += 0.5
+            elif current_data['macd'] > current_data['MACD_Signal']:
+                reward -= 0.5
+
+            # RSI
+            if current_data['rsi'] > 55:
+                reward += 0.5
+            elif current_data['rsi'] < 45:
+                reward -= 0.5
+
+            # CCI
+            if current_data['cci'] > 50:
+                reward += 0.5
+            elif current_data['cci'] < -50:
+                reward -= 0.5
+
+            # ADX
+            if current_data['adx'] > 20:
+                reward += 0.5
+            elif current_data['cci'] < 20:
+                reward -= 0.5
+        
+        # Technical indicator-based rewards
+        if action == 2:  # Buying
+            # MACD
+            if current_data['macd'] > current_data['MACD_Signal']:
+                reward += 0.5
+            elif current_data['macd'] < current_data['MACD_Signal']:
+                reward -= 0.5
+            
+            # RSI
+            if current_data['rsi'] < 45:
+                reward += 0.5
+            elif current_data['rsi'] > 55:
+                reward -= 0.5
+            
+            # CCI
+            if current_data['cci'] < -50:
+                reward += 0.5
+            elif current_data['cci'] > 50:
+                reward -= 0.5
+
+            # ADX
+            if current_data['adx'] > 20:
+                reward += 0.5
+            elif current_data['cci'] < 20:
+                reward -= 0.5
+
+        # Penalize holding during strong signals
+        if action == 0:  # Holding
+            if (current_data['macd'] > current_data['MACD_Signal'] and 
+                current_data['rsi'] < 45 and 
+                current_data['cci'] < -50 and current_data['adx'] > 20):
+                reward -= 5  # Holding during strong buy signal
+            elif (current_data['macd'] < current_data['MACD_Signal'] and 
+                  current_data['rsi'] > 55 and 
+                  current_data['cci'] > 50 and current_data['adx'] > 20):
+                reward -= 5  # Holding during strong sell signal
+            elif current_data['adx'] < 20:
+                reward += 0.5  # Reward for holding during a weak trend (low ADX)
+
+        if action == 0 and self.current_step - self.last_trade >= 1 and self.current_step - self.last_trade <= 5:
+            reward += 1  # Reward holding for a longer period
+        elif self.current_step - self.last_trade > 10:
+            reward -= 5
+
         return reward
 
     def _get_observation(self):
         data_slice = self.data.iloc[self.current_step - self.window_size:self.current_step]
-        observation = np.zeros((self.window_size, 8))
+        observation = np.zeros((self.window_size, 9))
         
         # Assign OHLC to observation array
         observation[:, :4] = data_slice[['open', 'high', 'low', 'close']].values
@@ -80,46 +171,10 @@ class SingleTickerStockTradingEnv:
         observation[:, 5] = np.nan_to_num(data_slice['rsi'].values, nan=50.0)
         observation[:, 6] = np.nan_to_num(data_slice['cci'].values, nan=0.0)
         observation[:, 7] = np.nan_to_num(data_slice['adx'].values, nan=0.0)
+        observation[:, 8] = np.nan_to_num(data_slice['MACD_Signal'].values, nan=0.0)
 
         return observation
     
-    def calculate_profit(self):
-        total_value = self.balance + self.shares_held * self.data.iloc[self.current_step]['close']
-        # Current balance + shares hold current price 
-        profit = total_value - self.initial_balance
-        return profit
-    
-    def calculate_correct_action_reward(self, action, current_data):
-        correct_action_reward = 0
-
-        if action == 2:  # Buying
-            if current_data['macd'] > 0 and current_data['rsi'] < 30 and current_data['cci'] < -100:
-                correct_action_reward += 20  # Strong buy signal
-            elif current_data['macd'] > 0 and current_data['rsi'] < 50:
-                correct_action_reward += 15  # Moderate buy signal
-            elif current_data['macd'] > 0 or current_data['rsi'] < 30:
-                correct_action_reward += 10  # Weak buy signal
-
-        # Strong sell signals
-        if action == 1:  # Selling
-            if current_data['macd'] < 0 and current_data['rsi'] > 70 and current_data['cci'] > 100:
-                correct_action_reward += 20  # Strong sell signal
-            elif current_data['macd'] < 0 and current_data['rsi'] > 50:
-                correct_action_reward += 15  # Moderate sell signal
-            elif current_data['macd'] < 0 or current_data['rsi'] > 70:
-                correct_action_reward += 10  # Weak sell signal
-
-        # Penalize holding during strong signals
-        if action == 0:  # Holding
-            if current_data['macd'] > 0 and current_data['rsi'] < 30 and current_data['cci'] < -100:
-                correct_action_reward -= 10  # Holding during strong buy signal
-            elif current_data['macd'] < 0 and current_data['rsi'] > 70 and current_data['cci'] > 100:
-                correct_action_reward -= 10  # Holding during strong sell signal
-            elif current_data['adx'] < 20:
-                correct_action_reward += 5  # Reward for holding during low volatility
-
-        # Penalize general overtrading
-        if action != 0:
-            correct_action_reward -= 5  # General penalty for overtrading
-
-        return correct_action_reward
+    def calculate_portfolio(self):
+        total_value = self.balance + self.shares_held * self.data.iloc[self.max_steps]['close']
+        return total_value
