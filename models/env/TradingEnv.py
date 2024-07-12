@@ -16,7 +16,9 @@ class SingleTickerStockTradingEnv:
         self.buy_price = []
         self.closing_price_history = []
 
-    def reset(self):
+    def reset(self, initial_balance=None):
+        if initial_balance is not None:
+            self.initial_balance = initial_balance
         self.balance = float(self.initial_balance)
         self.shares_held = 0
         self.current_step = self.window_size
@@ -53,31 +55,26 @@ class SingleTickerStockTradingEnv:
         elif action == 1:  # Selling
             if self.shares_held > 0:
                 sell_value = current_data['close'] * self.shares_held
-                if self.balance < current_data['close']:
-                    reward += 0.5
                 self.balance += sell_value
                 profit = sell_value - sum(self.buy_price)
+                if self.balance < current_data['close']:
+                    reward += 2
                 reward += self.calculate_reward(action, current_data, profit)
                 self.shares_held = 0
                 self.buy_price = []
                 self.last_trade = self.current_step
             else:
-                reward -= 10
+                reward -= 4
 
         elif action == 2:  # Buying
             if self.balance >= current_data['close']:
                 self.shares_held += 1
                 self.balance -= current_data['close']
-                if len(self.buy_price) > 0 and current_data['close'] < self.buy_price[-1]:
-                    reward += 0.5
+                reward += self.calculate_reward(action, current_data)
                 self.last_trade = self.current_step
                 self.buy_price.append(current_data['close'])
-                reward += self.calculate_reward(action, current_data)
             else:
-                reward -= 7
-
-        if self.balance < current_data['close'] and self.shares_held > 0 and action == 2:
-            reward -= 1000  # Penalty for not selling to cut losses
+                reward -= 3
 
         return reward
 
@@ -87,7 +84,7 @@ class SingleTickerStockTradingEnv:
         # Profit-based rewards
         if action == 1 and self.shares_held > 0:  # Selling
             if profit > 0:
-                reward += profit * 10  # Positive reward for profitable trades
+                reward += profit * 5 # Positive reward for profitable trades
             
             # MACD
             if current_data['macd'] < current_data['MACD_Signal']:
@@ -152,10 +149,10 @@ class SingleTickerStockTradingEnv:
             elif current_data['adx'] < 20:
                 reward += 0.5  # Reward for holding during a weak trend (low ADX)
 
-        if action == 0 and self.current_step - self.last_trade >= 1 and self.current_step - self.last_trade <= 5:
-            reward += 1  # Reward holding for a longer period
+        if action == 0 and self.current_step - self.last_trade >= 1 and self.current_step - self.last_trade <= 10:
+            reward += 0.5  # Reward holding for a longer period
         elif self.current_step - self.last_trade > 10:
-            reward -= 5
+            reward -= 1
 
         return reward
 

@@ -12,6 +12,7 @@ import pickle
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 
 class DQNAgent:
     def __init__(self, state_size, action_size):
@@ -21,9 +22,9 @@ class DQNAgent:
         self.memory = deque(maxlen=50000)
         self.gamma = 0.9  # Higher prioritize long-term rewards/ Low short-term
         self.epsilon = 1.0  # exploration rate
-        self.epsilon_min = 0.1 # Higher can do more risky move to explore, Lower lead to sooner convergance
-        self.epsilon_decay = 0.98
-        self.learning_rate = 0.0005
+        self.epsilon_min = 0.01 # Higher can do more risky move to explore, Lower lead to sooner convergance
+        self.epsilon_decay = 0.985
+        self.learning_rate = 0.005
 
         self.model = self._build_model().to(self.device)
         self.target_model = self._build_model().to(self.device)
@@ -57,47 +58,14 @@ class DQNAgent:
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
-    # def act(self, state):
-    #     if np.random.rand() <= self.epsilon:
-    #         action = random.randrange(self.action_size)
-    #         return action
-
-    #     state_tensor = torch.tensor(state, dtype=torch.float32).to(self.device)
-    #     q_values = self.model(state_tensor).detach().cpu().numpy()
-    #     action = np.argmax(q_values)
-    #     return action
-
-    # def replay(self, batch_size):
-    #     minibatch = random.sample(self.memory, batch_size)
-    #     total_loss = 0.0
-    #     for state, action, reward, next_state, done in minibatch:
-    #         state_tensor = torch.tensor(state, dtype=torch.float32).to(self.device).view(1, -1)
-    #         next_state_tensor = torch.tensor(next_state, dtype=torch.float32).to(self.device).view(1, -1)
-    #         target = torch.tensor(reward, dtype=torch.float32).to(self.device)
-
-    #         if not done:
-    #             next_q_values = self.target_model(next_state_tensor).detach()
-    #             target += self.gamma * torch.max(next_q_values)
-
-    #         target_f = self.model(state_tensor).detach().clone()
-    #         target_f[0, action] = target
-
-    #         self.model.zero_grad()
-    #         loss = self.loss_fn(self.model(state_tensor), target_f)
-    #         loss.backward()
-    #         self.optimizer.step()
-
-    #         total_loss += loss.item()
-    #     self.scheduler.step()
-
-    #     return total_loss
-
     def act(self, state):
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         state_tensor = torch.tensor(state, dtype=torch.float32).to(self.device)
+        self.model.eval()  # Set the model to evaluation mode
         with torch.no_grad():
             q_values = self.model(state_tensor).cpu().numpy()
+        self.model.train()  # Set the model back to training mode
         return np.argmax(q_values)
 
     def replay(self, batch_size):

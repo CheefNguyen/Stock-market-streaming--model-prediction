@@ -21,8 +21,8 @@
 
             <h2 style="margin-top: 3vh; margin-bottom: 5vh;">Enter your available initial investment fund</h2>
             
-            <div id="balanceSlider" class="range-slider grad" style='--min:5000; --max:10000; --step:100; --value:7500; --text-value:"7500"; --prefix:"$"'>
-                <input type="range" min="5000" max="10000" step="100" value="7500" oninput="this.parentNode.style.setProperty('--value',this.value); this.parentNode.style.setProperty('--text-value', JSON.stringify((+this.value).toLocaleString()))">
+            <div id="balanceSlider" class="range-slider grad" style='--min:500; --max:5000; --step:100; --value:2500; --text-value:"2500"; --prefix:"$"'>
+                <input id="balanceInput" type="range" min="500" max="5000" step="100" value="2500" oninput="this.parentNode.style.setProperty('--value',this.value); this.parentNode.style.setProperty('--text-value', JSON.stringify((+this.value).toLocaleString()))">
                 <output></output>
                 <div class='range-slider__progress'></div>
             </div>
