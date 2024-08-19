@@ -9,3 +9,4 @@ kafka
 include
 dist
 thesis_app.egg-info
+test.py
