@@ -10,10 +10,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 import os
 import pandas as pd
-from ta.trend import MACD
+from ta.trend import EMAIndicator, CCIIndicator, ADXIndicator
 from ta.momentum import RSIIndicator
-from ta.trend import CCIIndicator
-from ta.trend import ADXIndicator
 
 default_args = {
     'owner': 'che',
@@ -40,11 +38,11 @@ def serialize_datetime(obj):
         return obj.isoformat()
 
 def add_technical_indicators(df):
-    # df = df.sort_values(by="date", ascending=True)
-
-    macd = MACD(df['close']).macd()
-    macd_signal = MACD(df['close']).macd_signal()
-    macd_histogram = MACD(df['close']).macd_diff()
+    # Calculate 10-day and 20-day EMAs
+    ema_10 = EMAIndicator(df['close'], window=10)
+    ema_20 = EMAIndicator(df['close'], window=20)
+    df['ema_10'] = ema_10.ema_indicator()
+    df['ema_20'] = ema_20.ema_indicator()
 
     # Calculate RSI
     rsi = RSIIndicator(df['close']).rsi()
@@ -56,13 +54,12 @@ def add_technical_indicators(df):
     adx = ADXIndicator(df['high'], df['low'], df['close']).adx()
 
     # Add indicators to DataFrame
-    df['macd'] = macd
-    df['MACD_Signal'] = macd_signal
-    df['MACD_Histogram'] = macd_histogram
+    df['macd'] = df['ema_10'] - df['ema_20']
+    df['MACD_Signal'] = df['macd'].ewm(span=9, adjust=False).mean()
     df['rsi'] = rsi
     df['cci'] = cci
     df['adx'] = adx
-
+    df = df.drop(['ema_10', 'ema_20'], axis=1)
     return df
 
 def realtime_task():
@@ -92,6 +89,7 @@ def realtime_task():
 def daily_task():
     date = datetime.today() - timedelta(days=1)
     date_str = date.strftime('%Y-%m-%d')
+    # date_str = "2024-06-21"
     # producer = KafkaProducer(bootstrap_servers = ['kafka:9092'])
     
     try:
@@ -107,7 +105,7 @@ def daily_task():
         start_date_str = start_date.strftime('%Y-%m-%d')
         for code in codeList:
             query = {'code': code, 'date': {'$gte': start_date_str, '$lte': date_str}}
-            cursor = collection.find(query, {"_id": 0})
+            cursor = collection.find(query, {"_id": 0}).sort('date', 1)
             df = pd.DataFrame(list(cursor))
             temp = filtered_df[filtered_df['code'] == code]
             df = pd.concat([df, temp], ignore_index= True)
@@ -123,7 +121,7 @@ def daily_task():
 
 with DAG('daily_dag',
          default_args= default_args,
-         schedule_interval='0 1 * * 2-6',
+         schedule_interval='0 1 * * 2-7',
          catchup= False) as dag:
 
     daily_streaming_task = PythonOperator(

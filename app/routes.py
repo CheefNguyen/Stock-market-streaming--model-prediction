@@ -8,9 +8,14 @@ from datetime import datetime
 import pandas as pd
 import json
 
+from ta.trend import MACD, CCIIndicator, ADXIndicator
+from ta.momentum import RSIIndicator
+
 from models.env.TradingEnv import *
 from models.models.DQNAgent import *
 from models.preprocessing.preprocess import *
+
+import random
 
 app = Flask(__name__, static_folder="static")
 
@@ -40,47 +45,94 @@ def get_stock_data():
     raw_data = response.json()['data']
     return jsonify(raw_data)
 
+def add_indicators(df):
+    df['macd'] = MACD(df['close']).macd()
+    df['MACD_Signal'] = MACD(df['close']).macd_signal()
+    df['MACD_Histogram'] = MACD(df['close']).macd_diff()
+    
+    rsi = RSIIndicator(df['close'])
+    df['rsi'] = rsi.rsi()
+    
+    cci = CCIIndicator(df['high'], df['low'], df['close'])
+    df['cci'] = cci.cci()
+    
+    adx = ADXIndicator(df['high'], df['low'], df['close'])
+    df['adx'] = adx.adx()
+    # df['plus_di'] = adx.adx_pos()
+    # df['minus_di'] = adx.adx_neg()
+    
+    return df
+
 @app.route('/get_action_data', methods=['GET'])
 def predict():
     global raw_data
     code = request.args.get('code')
+    init_balance = float(request.args.get('balance'))
+    print(init_balance)
 
     query = {'code': code, 'date': {'$gte': "2024-01-01"}}
-    # query = {'code': code, 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }} #test
-    cursor = collection.find(query)
-    df = pd.DataFrame(list(cursor))
-    df = df.sort_values('date')
-    print(df)
 
-    env = SingleTickerStockTradingEnv(df, window_size=25, initial_balance=100)
+    # query = {'code': code, 'date': {'$lt': "2022-12-31"}} #train
+    # query = {'code': code, 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }} #test
+    cursor = collection.find(query).sort('date', 1)
+    df = pd.DataFrame(list(cursor))
+    temp_df = pd.DataFrame(raw_data)
+    if df.iloc[-1]['date'] != temp_df.iloc[0]['date'] and df.iloc[-1]['date'] > "2024-01-01":
+        df = df.append(temp_df.iloc[0], ignore_index = True)
+        df = add_indicators(df)
+    # print(df)
+
+    model_weights_path = f'models/trained_models/temp5/{code}_model_weights.pth'
+
+    env = SingleTickerStockTradingEnv(df, window_size=25)
     state_size = env.observation_space[0] * env.observation_space[1]
     action_size = env.action_space
     agent = DQNAgent(state_size, action_size)
 
-    model_weights_path = f'models/trained_models/{code}_model_weights.pth'
     agent.load_agent(model_weights_path)
-    
-    state = env.reset()
-    state = np.reshape(state, [1, state_size])
 
-    actions = []
     done = False
 
-    agent.epsilon = 0
+    actions = []
+    balances = []
+    portfolio = 0
 
+    # for i in range(20):
+    #     balances_ = []
+    #     done = False
+    state = env.reset(initial_balance=init_balance)
+    state = np.reshape(state, [1, state_size])
+    agent.epsilon = 0
+    agent.model.eval()
+    
     while not done:
-        action = agent.act(state, env.shares_held)
+        current_price = env.data.iloc[env.current_step]['close']
+        action = agent.act(state)
+
+        # if action == 1 and env.shares_held == 0:
+        #     action = 0
+        # if action == 2 and env.balance < current_price:
+        #     action = 0
+
+        next_state, reward, done, info = env.step(action)
+        balances.append(env.balance)
+
         actions.append(action)
-        next_state, reward, done, _ = env.step([action])
         state = np.reshape(next_state, [1, state_size])
 
+    portfolio = env.calculate_portfolio()
+    
+    
+    
     dates = df['date'].iloc[env.window_size:].tolist()
     prices = df['close'].iloc[env.window_size:].tolist()
     
     response_data = {
-        'dates': [str(date) for date in dates],  # Convert dates to string
-        'actions': [int(action) for action in actions],  # Convert actions to int
-        'prices': [float(price) for price in prices]  # Convert prices to float
+        'dates': [str(date) for date in dates],
+        'actions': [int(action) for action in actions],
+        'prices': [float(price) for price in prices],
+        'portfolio': portfolio,
+        'balance' : balances
     }
     
     return jsonify(response_data)
