@@ -73,13 +73,13 @@ def predict():
     query = {'code': code, 'date': {'$gte': "2024-01-01"}}
 
     # query = {'code': code, 'date': {'$lt': "2022-12-31"}} #train
-    query = {'code': code, 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }} #test
+    # query = {'code': code, 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }} #test
     cursor = collection.find(query).sort('date', 1)
-    # df = pd.DataFrame(list(cursor))
-    # temp_df = pd.DataFrame(raw_data)
-    # if df.iloc[-1]['date'] != temp_df.iloc[0]['date'] and df.iloc[-1]['date'] > "2024-01-01":
-    #     df = df.append(temp_df.iloc[0], ignore_index = True)
-    #     df = add_indicators(df)
+    df = pd.DataFrame(list(cursor))
+    temp_df = pd.DataFrame(raw_data)
+    if df.iloc[-1]['date'] != temp_df.iloc[0]['date'] and df.iloc[-1]['date'] > "2024-01-01":
+        df = df.append(temp_df.iloc[0], ignore_index = True)
+        df = add_indicators(df)
     # print(df)
 
     model_weights_path = f'models/trained_models/temp5/{code}_model_weights.pth'

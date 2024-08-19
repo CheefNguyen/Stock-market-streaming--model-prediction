@@ -57,8 +57,8 @@ class SingleTickerStockTradingEnv:
                 sell_value = current_data['close'] * self.shares_held
                 self.balance += sell_value
                 profit = sell_value - sum(self.buy_price)
-                if self.balance < current_data['close']:
-                    reward += 2
+                # if self.balance < current_data['close']:
+                #     reward += 2
                 reward += self.calculate_reward(action, current_data, profit)
                 self.shares_held = 0
                 self.buy_price = []

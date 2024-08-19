@@ -1,77 +1,91 @@
 import numpy as np
 import pandas as pd
-import pickle
+from env.TradingEnv import SingleTickerStockTradingEnv
+from models.DQNAgent import DQNAgent
 import matplotlib.pyplot as plt
+import random
+import torch
 
-from env.TradingEnv import *
-from models.DQNAgent import *
-from preprocessing.preprocess import create_ticker_dict
+# Load data from MongoDB or CSV
+def load_data_from_mongodb(code):
+    from pymongo import MongoClient
+    import os
+    from dotenv import load_dotenv
 
-df = pd.read_csv("models\data\done_data_indicators.csv")
-tickers = df['code'].unique()
-df_test = df[df['date'] > '2022-12-31']
+    load_dotenv()
+    DBUSERNAME = os.environ.get("DB_USERNAME")
+    DBPASSSWORD = os.environ.get("DB_PASSWORD")
+    client = MongoClient(f"mongodb+srv://{DBUSERNAME}:{DBPASSSWORD}@clusterthesis.keduavv.mongodb.net/")
+    db = client["thesis"]
+    collection = db["dailyRawData"]
 
-# Preprocess
-df_test = create_ticker_dict(df_test)
+    query = {'code': code, 'date': {'$gte': "2022-12-31", '$lt': "2024-01-01" }} #test
+    cursor = collection.find(query)
+    df = pd.DataFrame(list(cursor))
+    df = df.sort_values('date')
+    return df
 
-env = MultiTickerStockTradingEnv(df_test, tickers, window_size=10)
-state_size = env.observation_space[0] * env.observation_space[1] * env.observation_space[2]
-action_size = env.action_space
-agent = DQNAgent(state_size, action_size)
+# Test function for the agent
+def test_agent(code, model_weights_path, initial_balance=500, window_size=25, start_date="2024-01-01", end_date="2024-12-31"):
+    df = load_data_from_mongodb(code)
 
-agent.load_agent('models\\trained_models\\torch_1strun\model_weights.pth', 'models\\trained_models\\torch_1strun\\agent_state.pkl')
+    env = SingleTickerStockTradingEnv(df, window_size=window_size, initial_balance=initial_balance)
+    state_size = env.observation_space[0] * env.observation_space[1]
+    action_size = env.action_space
+    agent = DQNAgent(state_size, action_size)
 
-print(env.max_steps)
-rewards = []
-profits = []
+    agent.load_agent(model_weights_path)
 
-EPISODES = 10
-for episode in range(EPISODES):
     state = env.reset()
     state = np.reshape(state, [1, state_size])
-    total_reward = 0
-    total_profit = 0
-    episode_balances = []
-    episode_profit = []
+
     done = False
-    prev_balance = 10000
+    agent.epsilon = 0
+
+    actions = []
+    rewards = 0
+    balances = []
+
     while not done:
         action = agent.act(state)
-        next_state, reward, done, _ = env.step(action)
-        next_state = np.reshape(next_state, [1, state_size])
-        total_reward += reward[0]
 
-        episode_profit.append(env.balance - prev_balance)
-        prev_balance = env.balance
-        
-        episode_balances.append(env.balance)
-        state = next_state
-    rewards.append(total_reward)
-    profits.append(total_profit)
-    # plt.plot(episode_balances, label=f'Episode {episode+1}')
-    plt.plot(episode_profit, label=f'Episode {episode+1}')
+        # if action == 1 and env.shares_held == 0:
+        #     action = 0
+        # if action == 2 and env.balance < current_price:
+        #     action = 0
 
-plt.title('Profit During Testing')
-plt.xlabel('Timestep')
-plt.ylabel('Balance')
-plt.legend()
+        next_state, reward, done, info = env.step(action)
+        balances.append(env.balance)
+
+        actions.append(action)
+        state = np.reshape(next_state, [1, state_size])
+
+    portfolio = env.calculate_portfolio()
+    dates = df['date'].iloc[env.window_size:]
+    plt.figure(figsize=(12, 6))
+    plt.plot(dates, balances, label='Balance', color='blue')
+    plt.scatter(dates, balances, c=actions, cmap='viridis', label='Actions')
+    plt.colorbar(label='Actions (0: Hold, 1: Sell, 2: Buy)')
+    plt.title('Balance and Actions Over Time')
+    plt.xlabel('Date')
+    plt.ylabel('Balance')
+    plt.legend()
+    plt.show()
 
 
-plt.figure(figsize=(12, 6))
-plt.subplot(2, 1, 1)
-plt.plot(rewards, label='Total Reward')
-plt.title('Total Reward During Testing ')
-plt.xlabel('Episode')
-plt.ylabel('Total Reward')
-plt.legend()
+    return None
 
-plt.subplot(2, 1, 2)
-plt.plot(profits, label='Total Profit')
-plt.title('Total Profit During Testing')
-plt.xlabel('Episode')
-plt.ylabel('Total Profit')
-plt.legend()
+# Example usage
+if __name__ == "__main__":
+    code = "VCB"
+    model_weights_path = f'models/trained_models/temp4/{code}_model_weights.pth'
+    initial_balance = 500
+    window_size = 25
+    start_date = "2023-01-01"
+    end_date = "2023-12-31"
 
-plt.tight_layout()
-plt.show()
+    np.random.seed(42)
+    random.seed(42)
+    torch.manual_seed(42)
 
+    test_agent(code, model_weights_path, initial_balance, window_size, start_date, end_date)

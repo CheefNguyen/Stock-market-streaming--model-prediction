@@ -1,6 +1,11 @@
-.env
+# .env
 __pycache__
 airflow/logs/*
 models/logs
 druid
 tensorflow
+build
+kafka
+include
+dist
+thesis_app.egg-info
